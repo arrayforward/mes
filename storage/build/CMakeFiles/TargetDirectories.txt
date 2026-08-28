@@ -1,0 +1,10 @@
+D:/manufacture/storage/build/CMakeFiles/sqlite3.dir
+D:/manufacture/storage/build/CMakeFiles/unistore.dir
+D:/manufacture/storage/build/CMakeFiles/eventstore_tests.dir
+D:/manufacture/storage/build/CMakeFiles/voxel_tests.dir
+D:/manufacture/storage/build/CMakeFiles/entity_tests.dir
+D:/manufacture/storage/build/CMakeFiles/demo_story.dir
+D:/manufacture/storage/build/CMakeFiles/demo_voxel.dir
+D:/manufacture/storage/build/CMakeFiles/test.dir
+D:/manufacture/storage/build/CMakeFiles/edit_cache.dir
+D:/manufacture/storage/build/CMakeFiles/rebuild_cache.dir

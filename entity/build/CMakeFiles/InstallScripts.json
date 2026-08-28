@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/manufacture/entity/build/cmake_install.cmake",
+		"D:/manufacture/entity/build/storage/cmake_install.cmake",
+		"D:/manufacture/entity/build/geocore/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

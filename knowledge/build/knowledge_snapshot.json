@@ -1,0 +1,813 @@
+{
+  "concepts": [
+    {
+      "attrs": {},
+      "name": "放松"
+    },
+    {
+      "attrs": {
+        "en": "Aggro"
+      },
+      "name": "警觉"
+    },
+    {
+      "attrs": {
+        "layer": "root"
+      },
+      "name": "状态"
+    },
+    {
+      "attrs": {},
+      "name": "看到"
+    },
+    {
+      "attrs": {},
+      "name": "躲避"
+    },
+    {
+      "attrs": {},
+      "name": "拔出"
+    },
+    {
+      "attrs": {},
+      "name": "持械"
+    },
+    {
+      "attrs": {
+        "entity_type": "person"
+      },
+      "name": "人物"
+    },
+    {
+      "attrs": {},
+      "name": "守卫"
+    },
+    {
+      "attrs": {},
+      "name": "感知动作"
+    },
+    {
+      "attrs": {
+        "entity_type": "creature"
+      },
+      "name": "生物"
+    },
+    {
+      "attrs": {
+        "entity_type": "thing"
+      },
+      "name": "物品"
+    },
+    {
+      "attrs": {},
+      "name": "呼喊"
+    },
+    {
+      "attrs": {},
+      "name": "通信动作"
+    },
+    {
+      "attrs": {
+        "entity_type": "place"
+      },
+      "name": "地点"
+    },
+    {
+      "attrs": {},
+      "name": "武器"
+    },
+    {
+      "attrs": {
+        "layer": "root"
+      },
+      "name": "实体"
+    },
+    {
+      "attrs": {
+        "en": "CombatAction"
+      },
+      "name": "战斗动作"
+    },
+    {
+      "attrs": {},
+      "name": "圣剑"
+    },
+    {
+      "attrs": {},
+      "name": "移动动作"
+    },
+    {
+      "attrs": {},
+      "name": "恶龙"
+    },
+    {
+      "attrs": {},
+      "name": "剑刃"
+    },
+    {
+      "attrs": {},
+      "name": "村庄"
+    },
+    {
+      "attrs": {
+        "en": "AttackEvent"
+      },
+      "name": "攻击"
+    },
+    {
+      "attrs": {
+        "layer": "root"
+      },
+      "name": "动作"
+    }
+  ],
+  "edges": [
+    {
+      "attrs": {},
+      "from": "cp-人物",
+      "to": "cp-实体",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-守卫",
+      "to": "cp-人物",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-生物",
+      "to": "cp-实体",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-恶龙",
+      "to": "cp-生物",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-物品",
+      "to": "cp-实体",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-武器",
+      "to": "cp-物品",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-圣剑",
+      "to": "cp-武器",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-剑刃",
+      "to": "cp-圣剑",
+      "type": "PART_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-地点",
+      "to": "cp-实体",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-村庄",
+      "to": "cp-地点",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-战斗动作",
+      "to": "cp-动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-持械",
+      "to": "cp-战斗动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-拔出",
+      "to": "cp-持械",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-攻击",
+      "to": "cp-战斗动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-移动动作",
+      "to": "cp-动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-躲避",
+      "to": "cp-移动动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-感知动作",
+      "to": "cp-动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-看到",
+      "to": "cp-感知动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-通信动作",
+      "to": "cp-动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-呼喊",
+      "to": "cp-通信动作",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-警觉",
+      "to": "cp-状态",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-放松",
+      "to": "cp-状态",
+      "type": "IS_A",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-攻击",
+      "to": "cp-武器",
+      "type": "REQUIRES",
+      "weight": 0.7
+    },
+    {
+      "attrs": {},
+      "from": "cp-拔出",
+      "to": "cp-持械",
+      "type": "SIMILAR",
+      "weight": 0.7
+    },
+    {
+      "attrs": {},
+      "from": "cp-警觉",
+      "to": "cp-放松",
+      "type": "OPPOSITE",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-圣剑",
+      "to": "cp-圣剑",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者拔出圣剑",
+      "to": "cp-拔出",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-勇者拔出圣剑",
+      "to": "pf-5f1dc74abf4ee6c0",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "cp-拔出",
+      "to": "pf-5f1dc74abf4ee6c0",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-勇者",
+      "to": "pf-5f1dc74abf4ee6c0",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-圣剑",
+      "to": "pf-5f1dc74abf4ee6c0",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-村口老树下",
+      "to": "pf-5f1dc74abf4ee6c0",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者",
+      "to": "in-圣剑",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-拔出",
+      "to": "in-勇者",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-圣剑",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-拔出",
+      "to": "in-圣剑",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-拔出",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟",
+      "to": "cp-人物",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟看到勇者拔剑",
+      "to": "cp-看到",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-张伟看到勇者拔剑",
+      "to": "pf-99aaf2de22a7ffd7",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "cp-看到",
+      "to": "pf-99aaf2de22a7ffd7",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-张伟",
+      "to": "pf-99aaf2de22a7ffd7",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-勇者拔剑",
+      "to": "pf-99aaf2de22a7ffd7",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461"
+      },
+      "from": "in-村口老树下",
+      "to": "pf-99aaf2de22a7ffd7",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者拔剑",
+      "to": "in-张伟",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-看到",
+      "to": "in-张伟",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者拔剑",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-看到",
+      "to": "in-勇者拔剑",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-看到",
+      "to": "in-村口老树下",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-恶龙",
+      "to": "cp-恶龙",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-村庄",
+      "to": "cp-村庄",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-恶龙袭击村庄",
+      "to": "cp-攻击",
+      "type": "INSTANCE_OF",
+      "weight": 0.85
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-恶龙袭击村庄",
+      "to": "pf-5482ece29ee49898",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "cp-攻击",
+      "to": "pf-5482ece29ee49898",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-恶龙",
+      "to": "pf-5482ece29ee49898",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-村庄",
+      "to": "pf-5482ece29ee49898",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-村庄上空",
+      "to": "pf-5482ece29ee49898",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-恶龙",
+      "to": "in-村庄",
+      "type": "COOCCUR",
+      "weight": 2.0
+    },
+    {
+      "attrs": {},
+      "from": "in-恶龙",
+      "to": "in-村庄上空",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-攻击",
+      "to": "in-恶龙",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-村庄",
+      "to": "in-村庄上空",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-攻击",
+      "to": "in-村庄",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-攻击",
+      "to": "in-村庄上空",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟躲避恶龙",
+      "to": "cp-躲避",
+      "type": "INSTANCE_OF",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-张伟躲避恶龙",
+      "to": "pf-06c32e1e667350b3",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "cp-躲避",
+      "to": "pf-06c32e1e667350b3",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-张伟",
+      "to": "pf-06c32e1e667350b3",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-恶龙",
+      "to": "pf-06c32e1e667350b3",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494"
+      },
+      "from": "in-村庄",
+      "to": "pf-06c32e1e667350b3",
+      "type": "OBSERVED_IN",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟",
+      "to": "in-恶龙",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟",
+      "to": "in-村庄",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-躲避",
+      "to": "in-张伟",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-躲避",
+      "to": "in-恶龙",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "cp-躲避",
+      "to": "in-村庄",
+      "type": "COOCCUR",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-勇者拔出圣剑",
+      "to": "in-恶龙袭击村庄",
+      "type": "BEFORE",
+      "weight": 1.0
+    },
+    {
+      "attrs": {},
+      "from": "in-张伟看到勇者拔剑",
+      "to": "in-张伟躲避恶龙",
+      "type": "BEFORE",
+      "weight": 1.0
+    }
+  ],
+  "instances": [
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "村庄上空"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "村庄"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "恶龙"
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494",
+        "perspective": "active",
+        "profile_id": "pf-5482ece29ee49898",
+        "time": "第二天"
+      },
+      "entity_ref": "ev-384304cc635cc494",
+      "name": "恶龙袭击村庄"
+    },
+    {
+      "attrs": {
+        "event_id": "ev-384304cc635cc494",
+        "perspective": "passive",
+        "profile_id": "pf-06c32e1e667350b3",
+        "time": "第二天"
+      },
+      "entity_ref": "ev-384304cc635cc494",
+      "name": "张伟躲避恶龙"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "勇者拔剑"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "en-d4e9cd2359bb5051",
+      "name": "张伟"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "村口老树下"
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461",
+        "perspective": "observer",
+        "profile_id": "pf-99aaf2de22a7ffd7",
+        "time": "从前"
+      },
+      "entity_ref": "ev-9db2119a3184e461",
+      "name": "张伟看到勇者拔剑"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "圣剑"
+    },
+    {
+      "attrs": {},
+      "entity_ref": "",
+      "name": "勇者"
+    },
+    {
+      "attrs": {
+        "event_id": "ev-9db2119a3184e461",
+        "perspective": "active",
+        "profile_id": "pf-5f1dc74abf4ee6c0",
+        "time": "从前"
+      },
+      "entity_ref": "ev-9db2119a3184e461",
+      "name": "勇者拔出圣剑"
+    }
+  ],
+  "rules": [
+    {
+      "antecedent": "cp-战斗动作",
+      "confidence": 0.8,
+      "consequent": "cp-警觉",
+      "id": "rl-combat-aggro",
+      "note": "所有战斗动作可能触发警觉/Aggro（v2 §4.1）",
+      "relation": "TRIGGERS"
+    },
+    {
+      "antecedent": "cp-攻击",
+      "confidence": 0.9,
+      "consequent": "cp-武器",
+      "id": "rl-attack-weapon",
+      "note": "攻击动作通常以武器为前置条件",
+      "relation": "REQUIRES"
+    }
+  ],
+  "version": "1.0.0"
+}

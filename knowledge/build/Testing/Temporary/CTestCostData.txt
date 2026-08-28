@@ -1,0 +1,14 @@
+types 2 0.0091745
+lexicon 2 0.0122051
+ontology 2 0.00987465
+ingest 2 0.0179185
+diffusion 2 0.0075379
+reasoner 2 0.0098481
+e2e 2 0.236924
+ame_test_core 2 0.0111698
+ame_test_storage 2 0.0147488
+ame_test_time 2 0.00955755
+ame_test_vector 2 0.00841995
+ame_test_keyword 2 0.00849285
+ame_test_diffusion 2 0.0083284
+---

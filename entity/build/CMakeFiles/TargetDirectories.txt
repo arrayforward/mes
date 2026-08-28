@@ -1,0 +1,15 @@
+D:/manufacture/entity/build/CMakeFiles/entity_algo.dir
+D:/manufacture/entity/build/CMakeFiles/entity_tests.dir
+D:/manufacture/entity/build/CMakeFiles/demo_entity.dir
+D:/manufacture/entity/build/CMakeFiles/test.dir
+D:/manufacture/entity/build/CMakeFiles/edit_cache.dir
+D:/manufacture/entity/build/CMakeFiles/rebuild_cache.dir
+D:/manufacture/entity/build/storage/CMakeFiles/sqlite3.dir
+D:/manufacture/entity/build/storage/CMakeFiles/unistore.dir
+D:/manufacture/entity/build/storage/CMakeFiles/test.dir
+D:/manufacture/entity/build/storage/CMakeFiles/edit_cache.dir
+D:/manufacture/entity/build/storage/CMakeFiles/rebuild_cache.dir
+D:/manufacture/entity/build/geocore/CMakeFiles/geocore.dir
+D:/manufacture/entity/build/geocore/CMakeFiles/test.dir
+D:/manufacture/entity/build/geocore/CMakeFiles/edit_cache.dir
+D:/manufacture/entity/build/geocore/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,256 @@
+Start testing: Aug 28 15:57 中国标准时间
+----------------------------------------------------------
+1/13 Testing: types
+1/13 Test: types
+Command: "D:/manufacture/knowledge/build/types_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"types" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] conduction_coeff_values
+[PASS] rel_name_roundtrip
+[PASS] rel_undirected_flags
+[PASS] error_and_ids
+---
+checks: 48, failures: 0, failed tests: 0/4
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"types" end time: Aug 28 15:57 中国标准时间
+"types" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/13 Testing: lexicon
+2/13 Test: lexicon
+Command: "D:/manufacture/knowledge/build/lexicon_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"lexicon" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] load_seed_lexicon
+[PASS] near_filter_and_cap
+[PASS] alias_mutual_guard
+[PASS] apply_lexicon_three_way
+[PASS] lexicon_errors
+[PASS] ame_lexicon_three_way
+[PASS] surface_forms_and_near_candidates
+---
+checks: 41, failures: 0, failed tests: 0/7
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"lexicon" end time: Aug 28 15:57 中国标准时间
+"lexicon" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/13 Testing: ontology
+3/13 Test: ontology
+Command: "D:/manufacture/knowledge/build/ontology_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"ontology" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] load_seed_ontology
+[PASS] is_a_closure
+[PASS] part_of_closure
+[PASS] rule_inheritance
+[PASS] seed_relations
+[PASS] upsert_and_dedup_edges
+[PASS] snapshot_roundtrip
+[PASS] ontology_errors
+---
+checks: 44, failures: 0, failed tests: 0/8
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ontology" end time: Aug 28 15:57 中国标准时间
+"ontology" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/13 Testing: ingest
+4/13 Test: ingest
+Command: "D:/manufacture/knowledge/build/ingest_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"ingest" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] classify_along_is_a_chain
+[PASS] near_synonym_verb_degraded
+[PASS] rule_forward_chaining_with_path
+[PASS] observed_in_anchors_back_reference
+[PASS] instance_of_and_cooccur_growth
+[PASS] link_sync_causes_and_before
+[PASS] instance_level_rule_with_binding_confidence
+[PASS] conflict_marking
+[PASS] ame_layer_drives_normalization
+---
+checks: 54, failures: 0, failed tests: 0/9
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"ingest" end time: Aug 28 15:57 中国标准时间
+"ingest" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/13 Testing: diffusion
+5/13 Test: diffusion
+Command: "D:/manufacture/knowledge/build/diffusion_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"diffusion" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] diffuse_basic_energy_and_decay
+[PASS] diffuse_undirected_traversal
+[PASS] diffuse_top3_paths_explainable
+[PASS] diffuse_budget_and_seed_filter
+---
+checks: 20, failures: 0, failed tests: 0/4
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"diffusion" end time: Aug 28 15:57 中国标准时间
+"diffusion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/13 Testing: reasoner
+6/13 Test: reasoner
+Command: "D:/manufacture/knowledge/build/reasoner_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"reasoner" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] seed_alias_normalization
+[PASS] seed_near_synonym_degraded
+[PASS] rule_forward_chain_multi_depth
+[PASS] no_seed_returns_empty
+---
+checks: 17, failures: 0, failed tests: 0/4
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"reasoner" end time: Aug 28 15:57 中国标准时间
+"reasoner" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/13 Testing: e2e
+7/13 Test: e2e
+Command: "D:/manufacture/knowledge/build/e2e_tests.exe"
+Directory: D:/manufacture/knowledge/build
+"e2e" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+lexicon_zh.json: applied=66628, 0.43s
+[PASS] e2e_demo_story_understanding
+---
+checks: 24, failures: 0, failed tests: 0/1
+<end of output>
+Test time =   0.47 sec
+----------------------------------------------------------
+Test Passed.
+"e2e" end time: Aug 28 15:57 中国标准时间
+"e2e" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/13 Testing: ame_test_core
+8/13 Test: ame_test_core
+Command: "D:/manufacture/knowledge/build/ame_test_core.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_core" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 20035/20035 passed ==
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_core" end time: Aug 28 15:57 中国标准时间
+"ame_test_core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/13 Testing: ame_test_storage
+9/13 Test: ame_test_storage
+Command: "D:/manufacture/knowledge/build/ame_test_storage.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_storage" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 19/19 passed ==
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_storage" end time: Aug 28 15:57 中国标准时间
+"ame_test_storage" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/13 Testing: ame_test_time
+10/13 Test: ame_test_time
+Command: "D:/manufacture/knowledge/build/ame_test_time.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_time" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 10/10 passed ==
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_time" end time: Aug 28 15:57 中国标准时间
+"ame_test_time" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/13 Testing: ame_test_vector
+11/13 Test: ame_test_vector
+Command: "D:/manufacture/knowledge/build/ame_test_vector.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_vector" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 13/13 passed ==
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_vector" end time: Aug 28 15:57 中国标准时间
+"ame_test_vector" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/13 Testing: ame_test_keyword
+12/13 Test: ame_test_keyword
+Command: "D:/manufacture/knowledge/build/ame_test_keyword.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_keyword" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 13/13 passed ==
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_keyword" end time: Aug 28 15:57 中国标准时间
+"ame_test_keyword" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/13 Testing: ame_test_diffusion
+13/13 Test: ame_test_diffusion
+Command: "D:/manufacture/knowledge/build/ame_test_diffusion.exe"
+Directory: D:/manufacture/knowledge/build
+"ame_test_diffusion" start time: Aug 28 15:57 中国标准时间
+Output:
+----------------------------------------------------------
+== 23/23 passed ==
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ame_test_diffusion" end time: Aug 28 15:57 中国标准时间
+"ame_test_diffusion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 28 15:57 中国标准时间

@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "comment": "种子词典（ame schema）：syn_strong 归并别名、syn_near 建 SIMILAR 弱边、antonyms 建 OPPOSITE 边。",
+  "entries": [
+    {
+      "word": "拔出",
+      "syn_strong": ["抽出", "拔"],
+      "syn_near": [{ "word": "持械", "score": 0.7 }]
+    },
+    {
+      "word": "攻击",
+      "syn_near": [
+        { "word": "袭击", "score": 0.85 },
+        { "word": "攻打", "score": 0.75 }
+      ]
+    },
+    {
+      "word": "警觉",
+      "syn_strong": ["警惕"],
+      "antonyms": ["放松"]
+    },
+    {
+      "word": "看到",
+      "syn_strong": ["看见", "目睹"]
+    },
+    {
+      "word": "村庄",
+      "syn_near": [{ "word": "村落", "score": 0.8 }]
+    }
+  ]
+}

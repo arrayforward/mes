@@ -1,0 +1,69 @@
+Start testing: Aug 28 15:06 中国标准时间
+----------------------------------------------------------
+1/3 Testing: eventstore_conformance
+1/3 Test: eventstore_conformance
+Command: "D:/manufacture/storage/build/eventstore_tests.exe"
+Directory: D:/manufacture/storage/build
+"eventstore_conformance" start time: Aug 28 15:06 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] memory_conformance
+[PASS] sqlite_memory_conformance
+[PASS] file_conformance
+[PASS] file_persistence
+[PASS] sqlite_file_persistence
+---
+checks: 282, failures: 0, failed tests: 0/5
+<end of output>
+Test time =   0.86 sec
+----------------------------------------------------------
+Test Passed.
+"eventstore_conformance" end time: Aug 28 15:07 中国标准时间
+"eventstore_conformance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/3 Testing: voxel_conformance
+2/3 Test: voxel_conformance
+Command: "D:/manufacture/storage/build/voxel_tests.exe"
+Directory: D:/manufacture/storage/build
+"voxel_conformance" start time: Aug 28 15:07 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] memory_voxel_conformance
+[PASS] sqlite_voxel_conformance
+[PASS] file_voxel_conformance
+[PASS] file_voxel_persistence
+[PASS] sqlite_voxel_file_persistence
+---
+checks: 203, failures: 0, failed tests: 0/5
+<end of output>
+Test time =   0.58 sec
+----------------------------------------------------------
+Test Passed.
+"voxel_conformance" end time: Aug 28 15:07 中国标准时间
+"voxel_conformance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/3 Testing: entity_conformance
+3/3 Test: entity_conformance
+Command: "D:/manufacture/storage/build/entity_tests.exe"
+Directory: D:/manufacture/storage/build
+"entity_conformance" start time: Aug 28 15:07 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] memory_entity_conformance
+[PASS] sqlite_entity_conformance
+[PASS] file_entity_conformance
+[PASS] file_entity_persistence
+[PASS] sqlite_entity_file_persistence
+---
+checks: 260, failures: 0, failed tests: 0/5
+<end of output>
+Test time =   0.82 sec
+----------------------------------------------------------
+Test Passed.
+"entity_conformance" end time: Aug 28 15:07 中国标准时间
+"entity_conformance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 28 15:07 中国标准时间

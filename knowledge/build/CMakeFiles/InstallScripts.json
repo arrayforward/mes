@@ -1,0 +1,14 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/manufacture/knowledge/build/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/storage/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/core/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/storage/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/time/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/vector/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/keyword/cmake_install.cmake",
+		"D:/manufacture/knowledge/build/ame/diffusion/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

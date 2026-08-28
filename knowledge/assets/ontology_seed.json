@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "comment": "语义图谱树种子本体：战斗/持械/移动/通信/感知域（v2 文档 §4.1 示例）。运行时只读，变更需升 version。",
+  "concepts": [
+    { "name": "实体", "attrs": { "layer": "root" } },
+    { "name": "人物", "is_a": "实体", "attrs": { "entity_type": "person" } },
+    { "name": "守卫", "is_a": "人物" },
+    { "name": "生物", "is_a": "实体", "attrs": { "entity_type": "creature" } },
+    { "name": "恶龙", "is_a": "生物" },
+    { "name": "物品", "is_a": "实体", "attrs": { "entity_type": "thing" } },
+    { "name": "武器", "is_a": "物品" },
+    { "name": "圣剑", "is_a": "武器" },
+    { "name": "剑刃", "part_of": "圣剑" },
+    { "name": "地点", "is_a": "实体", "attrs": { "entity_type": "place" } },
+    { "name": "村庄", "is_a": "地点" },
+
+    { "name": "动作", "attrs": { "layer": "root" } },
+    { "name": "战斗动作", "is_a": "动作", "attrs": { "en": "CombatAction" } },
+    { "name": "持械", "is_a": "战斗动作" },
+    { "name": "拔出", "is_a": "持械" },
+    { "name": "攻击", "is_a": "战斗动作", "attrs": { "en": "AttackEvent" } },
+    { "name": "移动动作", "is_a": "动作" },
+    { "name": "躲避", "is_a": "移动动作" },
+    { "name": "感知动作", "is_a": "动作" },
+    { "name": "看到", "is_a": "感知动作" },
+    { "name": "通信动作", "is_a": "动作" },
+    { "name": "呼喊", "is_a": "通信动作" },
+
+    { "name": "状态", "attrs": { "layer": "root" } },
+    { "name": "警觉", "is_a": "状态", "attrs": { "en": "Aggro" } },
+    { "name": "放松", "is_a": "状态" }
+  ],
+  "relations": [
+    { "from": "攻击", "to": "武器", "type": "REQUIRES", "weight": 0.7 }
+  ],
+  "rules": [
+    {
+      "id": "rl-combat-aggro",
+      "antecedent": "战斗动作",
+      "relation": "TRIGGERS",
+      "consequent": "警觉",
+      "confidence": 0.8,
+      "note": "所有战斗动作可能触发警觉/Aggro（v2 §4.1）"
+    },
+    {
+      "id": "rl-attack-weapon",
+      "antecedent": "攻击",
+      "relation": "REQUIRES",
+      "consequent": "武器",
+      "confidence": 0.9,
+      "note": "攻击动作通常以武器为前置条件"
+    }
+  ]
+}

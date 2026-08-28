@@ -1,0 +1,22 @@
+Start testing: Aug 28 15:07 中国标准时间
+----------------------------------------------------------
+1/1 Testing: entity_resolver
+1/1 Test: entity_resolver
+Command: "D:/manufacture/entity/build/entity_tests.exe"
+Directory: D:/manufacture/entity/build
+"entity_resolver" start time: Aug 28 15:07 中国标准时间
+Output:
+----------------------------------------------------------
+[PASS] memory_resolver_conformance
+[PASS] sqlite_resolver_conformance
+---
+checks: 298, failures: 0, failed tests: 0/2
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"entity_resolver" end time: Aug 28 15:07 中国标准时间
+"entity_resolver" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 28 15:07 中国标准时间
