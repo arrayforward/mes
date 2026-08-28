@@ -38,7 +38,8 @@ mechanical-heart/
 ├── geocore/               空间几何内核(多尺度嵌套参考系 + 锚点路径码)
 ├── knowledge/             语义图谱树(本体 / 推理 / 词汇-联想)
 ├── storage/               统一数据存储层(EventStore / VoxelStore / EntityStore)
-└── voxel/                 时空记忆块服务(stmb:4D 可回溯结构化记忆)
+├── voxel/                 时空记忆块服务(stmb:4D 可回溯结构化记忆)
+└── bench/                 心跳 tick 基准测试(五阶段循环的可执行版本)
 ```
 
 | 子模块 | 在心跳中的角色 | 核心产出 | 子系统 README |
@@ -48,6 +49,7 @@ mechanical-heart/
 | **knowledge** | 语义理解 | `Engine`: 本体推理 + 符号扩展 + 关键词图扩散 + 八步摄入管道 | [knowledge/README.md](knowledge/README.md) |
 | **storage** | 持久化底座 | `RecordBackend` SPI + EventStore / VoxelStore / EntityStore 三个领域模型 | [storage/README.md](storage/README.md) |
 | **voxel** | 时空记忆 | `StmbService`: 块状态机 + 置信度衰减 + 版本回溯 + LOD + 动静分离 + 仲裁管线 | [voxel/README.md](voxel/README.md) |
+| **bench** | 心跳基准 | `tick_bench`: 五阶段串行计时 + 分位数统计 + memory/sqlite 双口径 | [bench/README.md](bench/README.md) |
 
 依赖方向(无环):
 
@@ -139,7 +141,32 @@ evt_store.append_event(case_event, "CNC_START", entity_view, t);
 
 ---
 
-## 6. 仓库约定
+## 6. 性能基准
+
+`bench/tick_bench` 是 §1 心跳模型的可执行基准(五阶段串行 + 分位数统计 +
+memory/sqlite 双口径):
+
+```bash
+cmake -S bench -B bench/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build bench/build -j
+./bench/build/tick_bench --ticks=2000 --warmup=100 --backend=memory --full-lexicon
+```
+
+头部结论(Intel Ultra 5 125H / MinGW g++ 15.2 / Release,2000 拍):
+
+| 配置 | 整拍 avg | p99 | 吞吐 |
+|---|---|---|---|
+| memory + 种子词典 | 845 µs | 1722 µs | 1184 ticks/s |
+| memory + 全量词典(66,628 条) | 1176 µs | 2720 µs | 850 ticks/s |
+| sqlite(任意词典) | ~97 ms | — | 10 ticks/s |
+
+- knowledge 按拍推理 `understand()` ≈ 300~460 µs;全量词典灌库 861 ms 一次性预热。
+- sqlite 后端瓶颈已定位: `sqlite_backend.cpp` 缺 PRAGMA(每条写一次 fsync),P0 待修。
+- 完整数据、诊断与结论见 [bench/docs/testing.md](bench/docs/testing.md)。
+
+---
+
+## 7. 仓库约定
 
 - 全部子模块已统一在主仓库管理(已移除原内嵌 git 信息与子模块拆分)。
 - 代码与文档以中文为主,API 命名遵循现有各模块风格(英文)。
@@ -148,6 +175,6 @@ evt_store.append_event(case_event, "CNC_START", entity_view, t);
 
 ---
 
-## 7. 许可
+## 8. 许可
 
 各子模块遵循各自许可(详见子模块根目录 `LICENSE`)。架构说明书采用项目内文档许可。
