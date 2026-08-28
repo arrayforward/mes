@@ -1,0 +1,6 @@
+[submodule "geocore"]
+	path = geocore
+	url = git@github.com:arrayforward/geocore.git
+[submodule "voxel"]
+	path = voxel
+	url = git@github.com:arrayforward/voxel.git
