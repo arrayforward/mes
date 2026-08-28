@@ -1,0 +1,16 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/manufacture/bench/build/cmake_install.cmake",
+		"D:/manufacture/bench/build/knowledge/cmake_install.cmake",
+		"D:/manufacture/bench/build/storage/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/core/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/storage/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/time/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/vector/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/keyword/cmake_install.cmake",
+		"D:/manufacture/bench/build/ame/diffusion/cmake_install.cmake",
+		"D:/manufacture/bench/build/geocore/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

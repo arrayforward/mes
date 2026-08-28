@@ -1,0 +1,35 @@
+Start testing: Aug 28 17:30 �й���׼ʱ��
+----------------------------------------------------------
+1/1 Testing: tick_bench_smoke
+1/1 Test: tick_bench_smoke
+Command: "D:/manufacture/bench/build/tick_bench.exe" "--ticks=200" "--warmup=20" "--backend=memory"
+Directory: D:/manufacture/bench/build
+"tick_bench_smoke" start time: Aug 28 17:30 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+knowledge 装配（一次性，不计入 tick）：
+  define_ontology       0.4 ms
+  apply_lexicon         0.2 ms  (本体建边 2 条)
+
+mechanical-heart tick bench: backend=memory ticks=200 warmup=20 stations=8 knowledge=on
+
+每阶段耗时（200 拍有效样本）：
+  entity       n=200    avg=   63.24  p50=   56.40  p95=  124.40  p99=  169.50  max=   189.30  min=   29.90 us
+  geocore      n=200    avg=    1.93  p50=    1.60  p95=    3.70  p99=    6.50  max=    11.90  min=    1.30 us
+  eventstore   n=200    avg=   26.66  p50=   23.40  p95=   46.00  p99=   69.40  max=   106.20  min=   21.20 us
+  voxelstore   n=200    avg=    9.54  p50=    6.90  p95=   20.30  p99=   58.20  max=    91.00  min=    6.10 us
+  knowledge    n=200    avg=   48.79  p50=   44.30  p95=   87.60  p99=  135.40  max=   147.00  min=   30.50 us
+
+整拍（5 阶段串行合计）：
+  tick_total   n=200    avg=  150.20  p50=  137.00  p95=  254.50  p99=  401.10  max=   419.80  min=   96.50 us
+
+吞吐：6658 ticks/s（串行单线程）
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"tick_bench_smoke" end time: Aug 28 17:30 �й���׼ʱ��
+"tick_bench_smoke" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 28 17:30 �й���׼ʱ��
