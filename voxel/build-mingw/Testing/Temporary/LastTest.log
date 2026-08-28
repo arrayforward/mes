@@ -1,0 +1,280 @@
+Start testing: Aug 28 15:19 �й���׼ʱ��
+----------------------------------------------------------
+1/13 Testing: test_types
+1/13 Test: test_types
+Command: "D:/manufacture/voxel/build-mingw/tests/test_types.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_types" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] core: TimeRange contains/overlaps 边界
+[PASS] core: AABB contains/intersects 边界与负坐标
+[PASS] core: makeBlockKey 格子/时间槽划分与负坐标 floor
+[PASS] core: MemoryBlock 字段与键的哈希容器适配
+[PASS] core: decayedConfidence 半衰期衰减与边界
+ALL TESTS PASS (core)
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"test_types" end time: Aug 28 15:19 �й���׼ʱ��
+"test_types" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/13 Testing: test_spatial_grid
+2/13 Test: test_spatial_grid
+Command: "D:/manufacture/voxel/build-mingw/tests/test_spatial_grid.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_spatial_grid" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] spatial_grid: insert / queryRegion 基本命中
+[PASS] spatial_grid: 跨区域块命中多个 cell
+[PASS] spatial_grid: remove 后不再命中且空格子销毁
+[PASS] spatial_grid: 空区域查询与无效删除
+ALL TESTS PASS (spatial_grid)
+<end of output>
+Test time =   0.17 sec
+----------------------------------------------------------
+Test Passed.
+"test_spatial_grid" end time: Aug 28 15:19 �й���׼ʱ��
+"test_spatial_grid" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/13 Testing: test_temporal_index
+3/13 Test: test_temporal_index
+Command: "D:/manufacture/voxel/build-mingw/tests/test_temporal_index.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_temporal_index" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] temporal_index: insert / queryRange 基本查询
+[PASS] temporal_index: queryRange 闭区间边界
+[PASS] temporal_index: 重复时间戳多块与 remove
+[PASS] temporal_index: expireBefore 返回被清理 id
+ALL TESTS PASS (temporal_index)
+<end of output>
+Test time =   0.20 sec
+----------------------------------------------------------
+Test Passed.
+"test_temporal_index" end time: Aug 28 15:19 �й���׼ʱ��
+"test_temporal_index" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/13 Testing: test_block_store
+4/13 Test: test_block_store
+Command: "D:/manufacture/voxel/build-mingw/tests/test_block_store.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_block_store" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] block_store: put/get/contains/remove/size 基本操作
+[PASS] block_store: 容量满时 LRU 淘汰顺序与返回数据
+[PASS] block_store: get 命中刷新 LRU 位置
+[PASS] block_store: 重复 put 同 id 的更新语义
+[PASS] block_store: 主动 evict 与淘汰计数
+ALL TESTS PASS (block_store)
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"test_block_store" end time: Aug 28 15:19 �й���׼ʱ��
+"test_block_store" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/13 Testing: test_version_log
+5/13 Test: test_version_log
+Command: "D:/manufacture/voxel/build-mingw/tests/test_version_log.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_version_log" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] version_log: archive / historyOf 升序与字段
+[PASS] version_log: getAt 时间回溯边界
+[PASS] version_log: seal 封存语义
+[PASS] version_log: drop 清理历史
+ALL TESTS PASS (version_log)
+<end of output>
+Test time =   0.26 sec
+----------------------------------------------------------
+Test Passed.
+"test_version_log" end time: Aug 28 15:19 �й���׼ʱ��
+"test_version_log" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/13 Testing: test_persistence
+6/13 Test: test_persistence
+Command: "D:/manufacture/voxel/build-mingw/tests/test_persistence.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_persistence" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] persistence: 快照 round-trip 字段一致
+[PASS] persistence: WAL 追加与重放一致
+[PASS] persistence: checkpoint 截断 WAL 且快照含全量
+[PASS] persistence: crash 尾部容错保留有效前缀
+[PASS] persistence: 服务端到端恢复(快照+WAL)状态一致
+[PASS] persistence: 来源注册表落盘(快照+WAL+截断容错+仲裁一致)
+ALL TESTS PASS (persistence)
+<end of output>
+Test time =   0.50 sec
+----------------------------------------------------------
+Test Passed.
+"test_persistence" end time: Aug 28 15:19 �й���׼ʱ��
+"test_persistence" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/13 Testing: test_shard
+7/13 Test: test_shard
+Command: "D:/manufacture/voxel/build-mingw/tests/test_shard.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_shard" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] shard: 分片归属正确落到对应 ShardKey 文件
+[PASS] shard: 延迟加载,query 触达自动加载分片
+[PASS] shard: 冷分片换出(脏数据 flush 后重新加载完整)
+[PASS] shard: checkpoint/restart 各分片数据与版本链一致
+[PASS] shard: 海量 smoke(5000 块 / 250 分片 / 驻留 <=4)
+ALL TESTS PASS (shard)
+<end of output>
+Test time =   2.18 sec
+----------------------------------------------------------
+Test Passed.
+"test_shard" end time: Aug 28 15:19 �й���׼ʱ��
+"test_shard" time elapsed: 00:00:02
+----------------------------------------------------------
+
+8/13 Testing: test_lod
+8/13 Test: test_lod
+Command: "D:/manufacture/voxel/build-mingw/tests/test_lod.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_lod" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] lod: 层级归属(自动/显式)与索引隔离
+[PASS] lod: 分层查询与跨层级合并
+[PASS] lod: 聚合上卷(计数/均值/多数状态)与摘要版本链
+[PASS] lod: 未细化检测与 hasFinerData 翻转
+[PASS] lod: 分片+LOD 组合(换出/重启后层级数据完整)
+ALL TESTS PASS (lod)
+<end of output>
+Test time =   3.31 sec
+----------------------------------------------------------
+Test Passed.
+"test_lod" end time: Aug 28 15:19 �й���׼ʱ��
+"test_lod" time elapsed: 00:00:03
+----------------------------------------------------------
+
+9/13 Testing: test_dynamic
+9/13 Test: test_dynamic
+Command: "D:/manufacture/voxel/build-mingw/tests/test_dynamic.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_dynamic" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] dynamic: 上报/轨迹累积/上限裁剪/速度差分
+[PASS] dynamic: 跨源关联(同物合并/异类异处新建)
+[PASS] dynamic: 状态推进 Active->Stationary->Archived
+[PASS] dynamic: 沉淀 Stationary->静态块(Pending->Stable)
+[PASS] dynamic: 临时占用标记随活跃状态出现/消失
+[PASS] dynamic: 持久化(单文件/分片)重启后实例轨迹一致
+ALL TESTS PASS (dynamic)
+<end of output>
+Test time =   0.39 sec
+----------------------------------------------------------
+Test Passed.
+"test_dynamic" end time: Aug 28 15:19 �й���׼ʱ��
+"test_dynamic" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/13 Testing: test_arbitration
+10/13 Test: test_arbitration
+Command: "D:/manufacture/voxel/build-mingw/tests/test_arbitration.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_arbitration" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] arbitration: 变化分类六种路径
+[PASS] arbitration: 周期模式 Seasonal 判定与相位外流程
+[PASS] arbitration: 加权确认阈值(高/低/未知来源)
+[PASS] arbitration: 观察窗口挂起/超时丢弃/状态恢复
+[PASS] arbitration: 空间一致性(垂直冲突/悬空 suspect)
+[PASS] arbitration: 管线状态持久化(v5)重启一致
+ALL TESTS PASS (arbitration)
+<end of output>
+Test time =   0.29 sec
+----------------------------------------------------------
+Test Passed.
+"test_arbitration" end time: Aug 28 15:19 �й���׼ʱ��
+"test_arbitration" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/13 Testing: test_vql
+11/13 Test: test_vql
+Command: "D:/manufacture/voxel/build-mingw/tests/test_vql.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_vql" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] vql: 迷你 JSON round-trip/转义/非法输入
+[PASS] vql: 语法解析(合法形式/错误位置化提示)
+[PASS] vql: 执行(过滤/AT 回溯/SUMMARY/HISTORY/STATS)
+[PASS] vql: Function Calling(schemas/8 工具/结构化错误)
+ALL TESTS PASS (vql)
+<end of output>
+Test time =   0.71 sec
+----------------------------------------------------------
+Test Passed.
+"test_vql" end time: Aug 28 15:19 �й���׼ʱ��
+"test_vql" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/13 Testing: test_stmb_service
+12/13 Test: test_stmb_service
+Command: "D:/manufacture/voxel/build-mingw/tests/test_stmb_service.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_stmb_service" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] service: put 后 query 命中
+[PASS] service: 空间粗筛+精过滤与时间范围过滤
+[PASS] service: remove 后索引同步清理
+[PASS] service: LRU 淘汰后索引同步清理且 stats 正确
+[PASS] service: expireBefore 同步清理 store 与索引
+[PASS] service: 状态机 Pending->Stable->Changing->Stable
+[PASS] service: query/get 返回衰减后的有效置信度
+[PASS] service: 淘汰块历史可回溯,purgeHistory 手动清理
+ALL TESTS PASS (stmb_service)
+<end of output>
+Test time =   0.28 sec
+----------------------------------------------------------
+Test Passed.
+"test_stmb_service" end time: Aug 28 15:19 �й���׼ʱ��
+"test_stmb_service" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/13 Testing: test_e2e
+13/13 Test: test_e2e
+Command: "D:/manufacture/voxel/build-mingw/tests/test_e2e.exe"
+Directory: D:/manufacture/voxel/build-mingw/tests
+"test_e2e" start time: Aug 28 15:19 �й���׼ʱ��
+Output:
+----------------------------------------------------------
+[PASS] e2e: 写入->联合查询->LRU淘汰->刷新改序->过期清理->stats->状态机变更->版本历史->时间回溯
+[PASS] e2e: 持久化 checkpoint->重建->状态延续->二次恢复
+[PASS] e2e: 分片模式 写入->跨片查询->换出->重启恢复
+[PASS] e2e: LOD 三级金字塔(粗骨架+局部细化+上卷)
+[PASS] e2e: 动静分离(车辆轨迹->静止->沉淀->重启验证)
+[PASS] e2e: 观测管线(多源->分类->窗口->仲裁->周期模式)
+[PASS] e2e: VQL 查询 + dispatch 工具调用端到端
+ALL TESTS PASS (e2e)
+<end of output>
+Test time =   0.83 sec
+----------------------------------------------------------
+Test Passed.
+"test_e2e" end time: Aug 28 15:19 �й���׼ʱ��
+"test_e2e" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 28 15:19 �й���׼ʱ��

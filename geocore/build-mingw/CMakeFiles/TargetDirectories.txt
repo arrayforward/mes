@@ -1,0 +1,6 @@
+D:/manufacture/geocore/build-mingw/CMakeFiles/geocore.dir
+D:/manufacture/geocore/build-mingw/CMakeFiles/unit_tests.dir
+D:/manufacture/geocore/build-mingw/CMakeFiles/e2e_tests.dir
+D:/manufacture/geocore/build-mingw/CMakeFiles/test.dir
+D:/manufacture/geocore/build-mingw/CMakeFiles/edit_cache.dir
+D:/manufacture/geocore/build-mingw/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>面向多尺度嵌套参考系的空间几何内核</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({startOnLoad:true, theme:'neutral',
+  themeVariables:{primaryColor:'#f5f5f5',primaryTextColor:'#333',primaryBorderColor:'#999',lineColor:'#666'}});
+renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+</script>
+<style>
+@page { size: A4; margin: 2.5cm 2cm;
+  @bottom-center { content: counter(page); } }
+@page :first { margin: 0; @bottom-center { content: none; } }
+body { margin:0; padding:0; font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size: 10.5pt; line-height: 1.6; color: #333; text-align: justify; text-align-last: left; }
+.cover { width:210mm; height:297mm; margin:0; position:relative; overflow:hidden; page-break-after:always; background:white; }
+.cover-content { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; width:80%; }
+.cover-title { font-size:24pt; font-weight:700; color:#333; margin-bottom:0.8cm; line-height:1.4; }
+.cover-subtitle { font-size:14pt; color:#666; margin-bottom:3cm; }
+.cover-meta { font-size:11pt; color:#333; line-height:2.2; }
+h1 { font-size:15pt; font-weight:700; margin-top:1.4em; page-break-after:avoid; border-bottom:1px solid #999; padding-bottom:0.2em; }
+h2 { font-size:12.5pt; font-weight:700; margin-top:1.1em; page-break-after:avoid; }
+h3 { font-size:11pt; font-weight:700; margin-top:0.9em; page-break-after:avoid; }
+.abstract { border-left:3px solid #333; padding:0.4em 0 0.4em 1em; margin:1em 0; background:#fafafa; }
+.keywords { margin:0.6em 0 1em 0; }
+.theorem { border-left:3px solid #333; padding-left:1em; margin:1em 0; page-break-inside:avoid; }
+.theorem-title { font-weight:bold; }
+.algorithm { border:1px solid #333; padding:0.6em 0.8em; background:white; margin:1em 0; page-break-inside:avoid; font-size:9.5pt; }
+.algorithm-title { font-weight:bold; margin-bottom:0.3em; }
+table { border-collapse:collapse; width:100%; max-width:100%; margin:1em 0; font-size:9.5pt; }
+caption { caption-side:top; text-align:center; font-size:9.5pt; margin-bottom:0.4em; }
+caption::before { content: attr(data-label) "　"; font-weight:bold; }
+thead { display:table-header-group; border-top:1.5px solid #333; border-bottom:1px solid #333; }
+tbody { border-bottom:1.5px solid #333; }
+th, td { padding:0.3em 0.5em; text-align:left; vertical-align:top; }
+tr { page-break-inside:avoid; }
+pre, table, figure, img, svg, .mermaid, blockquote, .equation { max-width:100%; box-sizing:border-box; }
+pre { background:#f5f5f5; padding:0.6em; font-size:8.8pt; line-height:1.45; overflow-x:auto; white-space:pre-wrap; word-wrap:break-word; }
+code { font-family:"Courier New", monospace; word-break:break-word; }
+.equation { margin:0.8em 0; page-break-inside:avoid; }
+.equation::after { content: attr(data-label); float:right; }
+.katex-display { overflow-x:auto; }
+figure { margin:1em 0; text-align:center; page-break-inside:avoid; }
+figcaption { font-size:9.5pt; margin-top:0.3em; }
+figcaption::before { content: attr(data-label) "　"; font-weight:bold; }
+.mermaid { text-align:center; margin:0.8em auto; }
+a { color:#333; }
+a.cite { color:black; text-decoration:none; vertical-align:super; font-size:0.75em; }
+.references { font-size:9.5pt; }
+.references li { padding-left:2em; text-indent:-2em; margin-bottom:0.3em; }
+ul, ol { margin:0.4em 0; padding-left:1.6em; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-content">
+    <div class="cover-title">面向多尺度嵌套参考系的空间几何内核：<br>路径码锚点树、图卡图册与运动学注入</div>
+    <div class="cover-subtitle">一种从星际尺度到毫米尺度的统一点目标空间索引架构</div>
+    <div class="cover-meta">
+      <p>研究论文（预印本）</p>
+      <p>2026 年 8 月</p>
+    </div>
+  </div>
+</div>
+
+<h1>摘　要</h1>
+<div class="abstract">
+<p>大型虚拟世界、机器人仿真与空天信息系统需要同时管理动态范围超过 $10^{14}$ 的空间——从行星轨道（$10^{11}$ m）到机械零件（$10^{-3}$ m）——并要求对象在高频增删、跨参考系迁移、参考系自身运动乃至非欧几何的约束下仍能进行低延迟的半径近邻查询。现有空间索引结构（R 树、八叉树、BVH、S2/H3 等）各自只覆盖该问题的一个子集，且大多建立在"单一全局参考系 + 静态拓扑"的假设上。本文提出一种三层空间几何内核：<b>场景注册表</b>（语义目录层，千级条目，注入坐标模型与运动学方程）、<b>路径码锚点树</b>（几何层，以位置码为纯函数的无限细分层级结构，区分虚拟节点与物化节点）、<b>对象桶</b>（数据层，场景原生坐标存储）。内核的核心思想有三：（1）将层级坐标系与空间索引统一为同一棵树，锚点即索引节点；（2）借鉴微分几何的图册概念，把非欧几何与运动学封装为场景级策略，跨场景换算归结为最近公共祖先（LCA）路径行走；（3）利用拓扑静止性将三角函数、矩阵合成等高开销运算下沉到构建期与帧级缓存。我们给出核心算法（AnchorOf、Convert、Find、Transfer）的伪码与复杂度分析，论证其在"层级化运动参考系下的点目标索引"这一问题类上的结构完备性，并明确划定七类超出其公理范围的问题（时空历史、拓扑可达、射线求交、对偶检测、高维相似、分布式一致、位置不确定性），为外围扩展模块的挂接提供骨架。</p>
+</div>
+<p class="keywords"><b>关键词：</b>空间索引；多尺度坐标系；位置码；八叉树；场景图；非欧几何；浮点精度；运动参考系</p>
+
+<h1>1　引言</h1>
+<p>空间索引是地理信息系统、游戏引擎、机器人与仿真系统的基石结构。经典结构各有明确的适用域：R 树及其变体<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-2">[2]</a>面向磁盘页与外存查询；kd 树<a class="cite" href="#ref-3">[3]</a>与八叉树<a class="cite" href="#ref-4">[4]</a>面向内存中的均匀划分；包围盒层次（BVH）<a class="cite" href="#ref-5">[5]</a>面向射线求交与静态场景；S2<a class="cite" href="#ref-6">[6]</a>与 H3<a class="cite" href="#ref-7">[7]</a>面向地球表面的离散全球网格。然而，以下三类需求的同时出现，使单一结构失效：</p>
+<p><b>（1）极端动态范围。</b>空天仿真要求在同一系统中表示火星（距太阳 $1.5\times10^{11}$ m）与桌面上的螺丝（$10^{-2}$ m）。双精度浮点虽有 53 位尾数，但当所有坐标被压入单一全局坐标系时，小尺度对象的坐标有效位被大尺度平移量吞噬——这是"远 jitter"问题，工程界的传统对策是浮动原点（floating origin）<a class="cite" href="#ref-8">[8]</a>，即以周期性的原点重定换取局部精度，但它破坏了索引结构的全局一致性。</p>
+<p><b>（2）嵌套且运动的参考系。</b>行星绕恒星公转、基地附着于行星表面、列车沿线路行驶——参考系之间是层级嵌套且随时间变化的。对象在参考系间迁移（探测车驶出基地、乘客下车）时，坐标与速度必须在保持精度的前提下完成参考系切换。</p>
+<p><b>（3）异构几何。</b>行星表面是球面流形，列车是一维弧长空间，基地是三维欧氏空间。任何全局坐标系都无法统一覆盖它们，但每个局部空间都有自己最自然的坐标表达。</p>
+<p>本文的出发点是：这三类困难并非各自独立，它们共享同一个结构性根源——<b>"单一全局参考系"这一隐含假设</b>。放弃该假设，把"参考系层级"提升为一等公民，三者可以被一个统一的内核消化。本文贡献如下：</p>
+<ul>
+<li>提出<b>路径码锚点树</b>：将层级参考系（锚点）与层级空间索引（八叉树层级）统一为同一棵树，锚点身份是坐标的纯函数，树拓扑静止、永不退化（第 5 节）；</li>
+<li>提出<b>场景注册表</b>作为语义目录层与策略注入点：以微分几何"图册—图卡"的视角封装非欧几何与运动学，使几何差异不穿透场景边界（第 6、7 节）；</li>
+<li>给出核心算法集（AnchorOf、Convert、Find、Transfer）的参考实现与复杂度分析，重点论证 LCA 行走与相位取模两条精度纪律（第 8、9 节）；</li>
+<li>划定内核的能力包络与七类边界外问题，为时空、图论、物理、检索等外围模块定义挂接骨架（第 10 节）。</li>
+</ul>
+
+<h1>2　相关工作</h1>
+<h2>2.1　空间划分与树形索引</h2>
+<p>四叉树/八叉树<a class="cite" href="#ref-4">[4]</a>递归二分空间，结构简单但存在对象跨界上提问题；松散八叉树（loose octree）<a class="cite" href="#ref-9">[9]</a>将节点有效边界放宽以消除对象跨层重复存储，本文的对象层归属规则与之同源。R 树<a class="cite" href="#ref-1">[1]</a>与 R* 树<a class="cite" href="#ref-2">[2]</a>以最小外接矩形组织对象，对外存友好，但插入删除引发的级联调整不适合高频动态负载，且单一全局树的动态范围受浮点限制。kd 树<a class="cite" href="#ref-3">[3]</a>适合静态点集的最近邻查询。BVH<a class="cite" href="#ref-5">[5]</a>配合 SAH 启发式是射线求交与碰撞检测的工业标准，其"构建期重投入换取查询期高性能"的思想被本文的场景层（静态、千级、准静止）直接继承，但 BVH 的负载假设（静态场景、海量查询）与本内核的对象层（高频迁移）相反。</p>
+<h2>2.2　离散全球网格与位置码</h2>
+<p>S2<a class="cite" href="#ref-6">[6]</a>将球面投影到立方体六个面，以 Hilbert 曲线位置 + 层级编码 64 位 cell id，实现了"cell 身份是坐标的纯函数"；H3<a class="cite" href="#ref-7">[7]</a>以二十面体测地投影构建 16 级六边形网格，子 cell 仅近似包含于父 cell。Geohash 本质上是四叉树位置码的字符串编码。本文的路径码是位置码思想从"全球表面"到"任意嵌套参考系"的推广：S2/H3 的层级是固定的全球细分，本文的层级由语义锚点与规则细分混合生成，且每层可以携带独立的坐标模型与运动学。</p>
+<h2>2.3　大尺度世界的工程实践</h2>
+<p>浮动原点技术<a class="cite" href="#ref-8">[8]</a>通过定期平移整个世界使相机附近的坐标保持小数值，广泛应用于太空题材模拟；其代价是全量对象更新与索引失效。场景图（scene graph）在图形学中组织了层级变换，但不承担空间索引职责。本文将两者合并：锚点树既是场景图（层级变换）又是索引（层级划分），原点"永远在局部"，无需重定。</p>
+<h2>2.4　运动对象与高维检索</h2>
+<p>TPR 树<a class="cite" href="#ref-10">[10]</a>与 TPR* 树<a class="cite" href="#ref-11">[11]</a>为持续运动对象建立时间参数化索引，服务于"预测查询"；本文的 Kinematic 解决的是参考系运动而非对象历史，两者正交（第 10 节将其列为边界外扩展）。HNSW<a class="cite" href="#ref-12">[12]</a>代表的高维近似最近邻检索建立在图结构上，与本文的低维几何划分互补。</p>
+
+<h1>3　系统模型与问题定义</h1>
+<h2>3.1　模型</h2>
+<p><b>定义 3.1（锚点与场景）。</b><i>锚点</i> $A$ 是一个带局部坐标系的空间区域，具有父锚点（除根外）、局部变换（相对父系的原点与朝向）与半径界限。<i>场景</i> $S$ 是一棵锚点子树的语义命名与生命周期管理单元，声明于全局锚点树的某条路径（挂载点）之下。</p>
+<p><b>定义 3.2（对象）。</b>对象 $o$ 是点目标，具有身份、所属锚点（归属路径）、位置向量与速度向量，坐标以其所属场景的原生坐标模型表示。对象的几何尺寸通过"归属层级"隐式表达：对象挂在尺度恰好容纳它的最深节点。</p>
+<p><b>定义 3.3（负载）。</b>系统支持四类操作：<b>Save</b>（插入对象）、<b>Remove</b>（删除）、<b>Transfer</b>（对象跨锚点迁移）、<b>Find</b>（给定锚点、中心与半径的近邻查询，结果按距离排序）；以及跨锚点/跨场景的坐标换算 <b>Convert</b>。参考系（锚点与场景）的创建是低频事件；对象的增删迁移是高频事件；查询频率最高。</p>
+<h2>3.2　设计公理</h2>
+<div class="theorem"><span class="theorem-title">公理 A1（拓扑静止）。</span><span class="theorem-content">锚点树的父子关系由几何与语义决定，一经创建不变；运动只改变节点的变换参数，不改变树的形状。</span></div>
+<div class="theorem"><span class="theorem-title">公理 A2（单归属）。</span><span class="theorem-content">任一对象在任一时刻恰有一条归属路径；多视角空间划分（行政、功能、电磁等正交维度）由外围辅助索引承担。</span></div>
+<div class="theorem"><span class="theorem-title">公理 A3（运动局限于语义节点）。</span><span class="theorem-content">只有语义锚点可携带运动学；规则细分产生的匿名节点相对其父静止，保证路径码的坐标可计算性。</span></div>
+<div class="theorem"><span class="theorem-title">公理 A4（边界欧氏化）。</span><span class="theorem-content">场景内部可以是任意几何，但跨越场景边界时一律换算为父场景的坐标；非欧性不穿透边界。</span></div>
+<h2>3.3　非目标</h2>
+<p>本内核不提供：对象历史与预测查询、连通性与路径规划、射线求交与连续碰撞、全配对检测、高维相似检索、多机分布式一致性、概率位置建模。第 10 节给出详细论证。</p>
+
+<h1>4　总体架构</h1>
+<p>内核由三层构成，各层的规模、变化率与访问模式互不相同，因而采用各自匹配的数据结构（<a href="#tab-1">表 1</a>）。设计原则是<b>结构跟随变化率</b>：变化越快的层，结构越简单。</p>
+<table>
+<caption data-label="表 1">三层架构总览</caption>
+<thead><tr><th>层</th>规模（典型）</th><th>变化率</th><th>访问模式</th><th>数据结构</th></tr></thead>
+<tbody>
+<tr><td>场景注册表</td><td>$\sim 10^3$</td><td>准静止（注册/注销、加载/休眠）</td><td>按名、按标签、按空间粗判</td><td>主表 + 名字哈希 + 标签倒排 + SoA 包围体数组</td></tr>
+<tr><td>路径码锚点树</td><td>物化 $\sim 10^6$（理论无限）</td><td>拓扑静止；变换参数随时间演化</td><td>点定位、LCA、上下行</td><td>路径码纯函数 + 物化哈希表 + 帧级变换缓存</td></tr>
+<tr><td>对象桶</td><td>$\sim 10^6$ 以上</td><td>高频增删迁移</td><td>桶内扫描、距离过滤排序</td><td>锚点内扁平数组 + 桶级哈希</td></tr>
+</tbody>
+</table>
+<figure id="fig-1">
+<div class="mermaid">
+flowchart LR
+    Q[查询请求] --> R[场景注册表]
+    R -->|rootPath| T[路径码锚点树]
+    T -->|归属路径| B[对象桶]
+    B --> O[距离过滤排序]
+    C[Convert] -->|LCA 行走| T
+</div>
+<figcaption data-label="图 1">内核数据流：查询经场景目录进入锚点树，命中物化节点后扫描对象桶；坐标换算沿锚点树 LCA 路径行走。</figcaption>
+</figure>
+<p>三层之间的接口只有两个：<b>rootPath</b>（场景到锚点树的挂载点）与<b>归属路径</b>（对象到锚点树的挂接点）。这意味着任何一层可独立替换实现，例如对象桶可由扁平数组换成小型 BVH 而不影响上层。</p>
+
+<h1>5　路径码锚点树</h1>
+<h2>5.1　统一：八叉树节点即匿名锚点</h2>
+<p>层级参考系（锚点）与层级空间索引（八叉树）在结构上同构：父子嵌套、局部坐标、层级界限。二者唯一的区别是产生方式——八叉树节点按规则自动细分，语义锚点按业务手工创建。本文将二者统一：<b>树中每个节点都是锚点</b>，语义锚点携带名字与运动学，匿名锚点由规则细分生成、按需生灭。八叉树不再是独立数据结构，而是"语义节点之间自动填补的中间层"。由此，尺度问题与精度问题获得统一解答：对象所在的树深决定其局部坐标的数值尺度，毫米级精度不再依赖全局网格的负指数层级，而由"挂在深节点"这一事实天然保证。</p>
+<h2>5.2　路径码：锚点身份的纯函数化</h2>
+<p>锚点无限细分意味着任何"存储全部锚点"的方案在数学上不成立；但细分是规则驱动的，因此给定坐标，"它属于哪一层哪个锚点"可以<b>计算</b>而非<b>查表</b>。这就是位置码（locational code）<a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-13">[13]</a>思想的核心。</p>
+<p><b>定义 5.1（路径码）。</b>锚点 $A$ 的路径码是其从根到自身的逐段子区编号序列：
+$$P(A) = [c_0, c_1, \dots, c_{d-1}], \quad c_i \in \mathbb{N}$$
+其中 $d$ 为深度，$c_i$ 为第 $i$ 层子区在其父区内的编号（欧氏场景中即 Morton 式八进制位组）。</p>
+<p>路径码上四个基本运算均为常数或线性时间：<b>父锚点</b>（去末段）、<b>包含关系</b>（前缀匹配）、<b>兄弟/邻居</b>（改末段）、<b>LCA</b>（最长公共前缀）：
+$$\mathrm{LCA}(P_a, P_b) = \text{最长公共前缀}, \quad \mathrm{lcaDepth} = |\mathrm{LCA}|$$</p>
+<p><b>定义 5.2（点定位）。</b>给定场景内坐标 $p$ 与目标精度 $\varepsilon$，归属路径由逐层量化直接算出：</p>
+<div class="algorithm"><div class="algorithm-title">算法 1：AnchorOf — 点定位（纯函数）</div>
+<pre>function AnchorOf(scene, p, ε):
+    path ← scene.rootPath
+    q ← p
+    while cellSize(path) > ε:
+        c ← QuantizeChild(q, cellSize(path))   // 位运算，base=2 时为右移
+        path ← path ⊕ c
+        q    ← LocalOffset(q, c)
+    return path</pre></div>
+<p>由公理 A3，匿名节点无旋转，量化仅涉及平移与二分，可用位移位完成；base 取 2 而非更高扇出，是因为 2 的幂在二进制浮点中精确表示、Morton 打包每层恰好 3 bit、且半径查询的"取整放大倍数"随 base 线性增长（最坏 $B$ 倍，体积放大 $B^3$），27 叉扇出在该权衡下严格劣于 8 叉。</p>
+<h2>5.3　虚拟节点与物化节点</h2>
+<p>路径码能算出的锚点即"存在"，但只有含对象或含子锚点的路径才占用存储：</p>
+<table>
+<caption data-label="表 2">虚拟节点与物化节点</caption>
+<thead><tr><th></th><th>虚拟节点</th><th>物化节点</th></tr></thead>
+<tbody>
+<tr><td>定义</td><td>路径码可算即存在</td><td>哈希表中有记录</td></tr>
+<tr><td>数量</td><td>无限</td><td>仅非空区域（$\sim 10^6$）</td></tr>
+<tr><td>变换</td><td>规则生成：量化偏移 + 单位旋转</td><td>存储：Kinematic（第 7 节）</td></tr>
+<tr><td>存储</td><td>零</td><td><code>unordered_map&lt;PathKey, NodeData&gt;</code></td></tr>
+</tbody>
+</table>
+<p>公理 A3 在此起关键作用：因为匿名节点静止且细分规则确定，任意深度的虚拟节点变换都是可计算的，点定位与 LCA 行走永远不会"查到不存在的锚点"。物化操作是哈希表插入，无树再平衡——<b>树形由几何决定而非插入顺序，永不退化</b>，这是路径码对 BVH/R 树的本质优势。</p>
+<h2>5.4　静止红利：时间局部性缓存</h2>
+<p>公理 A1 使两个缓存合法化。（1）<b>路径缓存</b>：连续查询通常位于同一区域，缓存上次命中的路径，下次查询先与缓存求 LCA，向上回溯再向下行走，平均深度从 $O(d)$ 降至 $O(\Delta)$（$\Delta$ 为查询间空间位移对应的层级差，相机连续移动时接近常数）。（2）<b>变换缓存</b>：物化节点缓存到场景根的累积变换矩阵，路径不变则帧内复用；三角函数只在锚点创建时求值，运行时为矩阵乘法（第 7.3 节讨论运动节点对该缓存的选择性失效）。</p>
+
+<h1>6　图卡图册：场景层的坐标模型注入</h1>
+<h2>6.1　图册视角</h2>
+<p>微分几何中，流形一般不存在单一全局坐标系，但可被一族局部坐标图卡（chart）覆盖，图卡间以转移映射（transition map）粘合，全体图卡构成图册（atlas）。本内核将这一构造实例化：<b>每个场景是一张图卡，以其最自然的坐标系描述局部空间；场景树是图册；Convert 即转移映射</b>。公理 A4 对应图册定义中"转移映射定义于图卡交集"的要求——本内核中交集由父子挂载关系显式给出。</p>
+<h2>6.2　坐标模型接口</h2>
+<p>场景注册表在创建场景时注入一个坐标模型（CoordinateModel），契约包含四组运算：</p>
+<table>
+<caption data-label="表 3">CoordinateModel 契约</caption>
+<thead><tr><th>运算</th><th>语义</th><th>备注</th></tr></thead>
+<tbody>
+<tr><td><code>ToParent / FromParent</code></td><td>与父场景的转移映射（含时间参数）</td><td>图卡边界，Convert 的基本构件</td></tr>
+<tr><td><code>Distance</code></td><td>场景内部度量</td><td>半径查询的"半径"语义归场景</td></tr>
+<tr><td><code>CellOf / NeighborCells</code></td><td>场景内部划分与邻域展开</td><td>对象桶的分格规则</td></tr>
+<tr><td><code>Normalize</code></td><td>坐标规范化（角度回卷、越界钳制）</td><td>写入时强制执行</td></tr>
+</tbody>
+</table>
+<h2>6.3　内置模型目录</h2>
+<table>
+<caption data-label="表 4">内置坐标模型</caption>
+<thead><tr><th>模型</th><th>存储坐标</th><th>Distance</th><th>划分</th><th>典型场景</th></tr></thead>
+<tbody>
+<tr><td>Euclidean3D</td><td>$(x,y,z)$</td><td>直线距离</td><td>路径码量化（base=2）</td><td>基地、房间、空间站（约九成场景）</td></tr>
+<tr><td>SphericalSurface</td><td>$(lat, lon, alt)$</td><td>大圆距离</td><td>S2 式 cell 或经纬分带</td><td>行星地表</td></tr>
+<tr><td>Orbital</td><td>轨道要素（相位、半径）</td><td>轨道系直线距离</td><td>沿轨道分层</td><td>行星系、卫星轨道</td></tr>
+<tr><td>MovingFrame1D</td><td>$(s, \text{横向}, \text{高})$</td><td>沿程距离为主</td><td>里程/车厢分段</td><td>列车、飞机、电梯</td></tr>
+</tbody>
+</table>
+<p>对象永远以场景原生坐标存储（球面上存 $(lat,lon,alt)$，列车上存 $(s,\cdot,\cdot)$），仅在 <code>ToParent</code> 边界换算。由此获得两条工程纪律：（1）欧氏场景走静态分派快路径（<code>std::variant</code> + <code>visit</code>），占绝大多数的调用零虚函数开销；（2）半径语义归场景——球面场景的大圆半径与列车场景的沿程半径互不混淆，跨场景查询时半径随坐标一并过转移映射（以边界点距离重估，属有界近似）。</p>
+<h2>6.4　组合示例</h2>
+<p>考虑"列车上的乘客查询附近 100 m"：列车场景（MovingFrame1D，$s{=}12.4$ km）内以沿程距离与车厢分段完成桶扫描；跨场景查询（"列车前方 50 km 的地面设施"）沿链向上——列车 $\to$ 地表（SphericalSurface，lat/lon 与大圆距离）$\to$ 行星（Orbital）$\to$ 恒星系（Euclidean3D）——在 LCA 场景换算后以对方度量查询。每一跳只涉及相邻两张图卡，模型数量增长不引起组合爆炸。</p>
+
+<h1>7　运动学注入</h1>
+<h2>7.1　Kinematic：变换作为时间的函数</h2>
+<p>公理 A1 将"运动"严格限定为变换参数的演化。节点的相对父系变换由 Kinematic 结构描述：</p>
+<div class="algorithm"><div class="algorithm-title">Kinematic 结构（语义锚点）</div>
+<pre>struct Kinematic:
+    type ∈ { Static, CircularOrbit, PathConstrained }
+    // Static:            origin, rotation            （常量）
+    // CircularOrbit:     orbitRadius, period, phase0, orbitalPlane, spinPeriod
+    // PathConstrained:   pathSpline, timetable       （列车/飞机：一维弧长约束）
+    OriginAt(t)   → Vec3d       // 本锚点原点在父系中的位置
+    RotationAt(t) → Quaternion  // 本锚点坐标系相对父系的朝向
+    OriginVelAt(t) → Vec3d      // 原点速度的解析导数（供速度切换）</pre></div>
+<p>MovingFrame1D 与 Orbital 由此统一：列车是"一维极坐标"（沿轨弧长 + 时刻表给出 $s(t)$），行星是"二维极坐标"（轨道角 + 周期给出 $\theta(t)$），二者都是 PathConstraint 的特化，无需新机制。</p>
+<h2>7.2　相位精度：圈数表示与取模纪律</h2>
+<p>极坐标表达的真正回报在三角函数精度。若相位以弧度线性累积，运行一年后 $\theta \sim 10^8$ rad，sin/cos 的参数约减（argument reduction）将吞噬有效位。本文规定：</p>
+<div class="theorem"><span class="theorem-title">纪律 P1（圈数取模）。</span><span class="theorem-content">相位以"圈数"存储，求值前对 1 取小数：$\theta(t) = 2\pi\cdot\mathrm{frac}(\phi_0 + t/T)$。进入 sin/cos 的参数恒在 $[0,2\pi)$，运行一万年与运行一秒的精度相同。</span></div>
+<div class="theorem"><span class="theorem-title">纪律 P2（存周期不存角速度）。</span><span class="theorem-content">以 $t/T$（一次除法）代替 $\omega\cdot t$（大数乘法后再取模），误差小一个数量级。</span></div>
+<p>至此，精度保障被拆分为两个正交机制：<b>平移精度靠锚点层级</b>（每层局部坐标数值有界），<b>角度精度靠圈数取模</b>。</p>
+<h2>7.3　时间一致性与缓存的选择性失效</h2>
+<div class="theorem"><span class="theorem-title">纪律 P3（同一时刻求值）。</span><span class="theorem-content">一次 Convert 的整条变换链必须使用同一个 $t$（由物理帧传入），禁止逐层各自取系统时间——否则高速运动天体将在链中"走步"，变换不再封闭。</span></div>
+<p>静态子树的根变换可离线烘焙（注册时一次合成，double 精度全程连乘）；含运动节点的链按帧时间戳缓存，帧内复用、帧间重算。运动链通常仅 2–3 层，重算开销可忽略；静止链不受任何影响。场景的粗判包围体对运动锚点取<b>扫掠包络</b>（圆轨道即其轨道环面的包围球），注册时计算一次，无需逐帧更新。</p>
+<h2>7.4　速度的参考系项</h2>
+<p>对象 Transfer 时，坐标变换不足以保持物理一致：速度必须携带参考系自身运动项。上行（子系→父系）时：
+$$\vec v_{\text{parent}} = R\,\vec v_{\text{child}} + \vec\omega \times (R\,\vec p_{\text{child}}) + \dot{\vec o}(t)$$
+其中 $\vec\omega \times (R\vec p_{\text{child}})$ 为旋转系的牵连速度，$\dot{\vec o}(t)$ 为原点速度的解析导数（圆轨道为切向速度 $2\pi r/T$）。忽略该项会使自转行星表面起飞的物体凭空丢失表面线速度（地球赤道约 465 m/s）。因此 Transfer 的接口强制速度与位置成对换算，不提供"只换坐标"的入口。</p>
+
+<h1>8　核心算法</h1>
+<h2>8.1　Convert：LCA 行走</h2>
+<div class="algorithm"><div class="algorithm-title">算法 2：ConvertPoint — 跨锚点坐标换算</div>
+<pre>function ConvertPoint(from, to, p, t):
+    lca ← LcaDepth(from, to)                    // 最长公共前缀
+    cur ← from
+    for d = from.depth downto lca+1:            // 上行：子系 → 父系
+        tr ← TransformAt(cur, t)                // 物化查表 / 虚拟规则生成
+        p  ← tr.RotationAt(t) * p + tr.OriginAt(t)
+        cur ← cur.Parent()
+    for d = lca+1 to to.depth:                  // 下行：父系 → 子系
+        tr ← TransformAt(to.Prefix(d), t)
+        p  ← tr.RotationAt(t)⁻¹ * (p − tr.OriginAt(t))
+    return p</pre></div>
+<p><b>为什么必须走 LCA 而非绕道根锚点：</b>（1）误差累积正比于链长，相邻锚点的 LCA 通常很深，绕根将无谓增加数十层四元数乘法；（2）绕根意味着中间坐标进入恒星系尺度（$10^{11}$ m）再减回，大数抵消是灾难现场，而走 LCA 时全程坐标保持在相遇层的局部尺度；（3）兄弟锚点切换（最常见情形，如探测车开往相邻基地）的 LCA 仅差 1–2 层，整个变换为 2–4 次四元数乘法。方向向量（速度、朝向）的换算省去平移项，仅逐层旋转。</p>
+<h2>8.2　跨场景换算</h2>
+<p>由于场景是全局路径树上的挂载点（<code>rootPath</code>），跨场景换算无需新机制：将行走中的取节点操作替换为跨场景解析——任意路径的归属由最长前缀匹配确定（场景注册表内 1000 个 rootPath，排序二分或前缀 trie 均可），场景内相对路径查该场景的物化表，虚拟节点按规则生成。两条补充规则：</p>
+<ul>
+<li><b>休眠场景仍参与换算。</b>休眠释放的是物化数据，元数据（rootPath、根变换、语义锚点的 Kinematic）必须保留；规则细分节点变换本就可计算。因此坐标换算永远可行，只有查对象才要求场景加载。</li>
+<li><b>远亲走烘焙矩阵，近亲走行走。</b>同星球跨场景（LCA 深）用算法 2；跨星球/跨星系用注册时烘焙的场景根变换：$p_B = M_{\text{root}}(B)^{-1}\, M_{\text{root}}(A)\, p_A$，两次矩阵运算；对热场景对可再缓存合成矩阵至一次运算。</li>
+</ul>
+<h2>8.3　Find：两阶段半径查询</h2>
+<div class="algorithm"><div class="algorithm-title">算法 3：Find — 场景内半径近邻查询</div>
+<pre>function Find(scene, center, radius, t):
+    // 阶段一：定位与候选收集（结构层）
+    base   ← AnchorOf(scene, center, ε(radius))     // 算法 1
+    cells  ← NeighborCells(base, radius)            // 坐标模型的邻域展开
+    cand   ← ∪ Materialize(c).bucket  for c in cells
+    // 阶段二：度量过滤与排序（数据层）
+    r2 ← radius²
+    hits ← [o for o in cand if scene.Distance²(o.pos, center) ≤ r2]   // 延迟开方
+    sort hits by distance²                          // 只需前 N 个时用 partial_sort
+    return hits</pre></div>
+<p>三条工程要点：（1）距离比较在平方域进行，仅对最终入选者开方；（2）"半径"语义与邻域展开均由场景的 CoordinateModel 给出，球面场景自动获得大圆语义；（3）跨场景 Find 先以 Convert 将查询球映到目标场景（半径以边界点重估），再调用本算法，祖先重叠由"对象挂在尺度最匹配节点"这一不变式保证，无需运行期去重——这消除了多级网格逐层扫描 + 去重集合的传统开销。</p>
+<h2>8.4　Transfer：先写后删的原子迁移</h2>
+<div class="algorithm"><div class="algorithm-title">算法 4：Transfer — 对象跨锚点迁移</div>
+<pre>function Transfer(obj, toAnchor, t):
+    p' ← ConvertPoint(obj.anchor, toAnchor, obj.pos, t)
+    v' ← ConvertVelocity(obj.anchor, toAnchor, obj.pos, obj.vel, t)  // 含 §7.4 参考系项
+    BucketAt(toAnchor).Insert(obj.id, p', v')     // 先写新
+    BucketAt(obj.anchor).Remove(obj.id)           // 后删旧：切换期不丢对象
+    obj.anchor ← toAnchor; obj.pos ← p'; obj.vel ← v'</pre></div>
+<h2>8.5　复杂度</h2>
+<table>
+<caption data-label="表 5">核心操作复杂度（$d$：树深，$k$：桶内候选数，$m$：命中数）</caption>
+<thead><tr><th>操作</th><th>时间</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>AnchorOf</td><td>$O(d)$</td><td>逐层量化，base=2 时为位运算</td></tr>
+<tr><td>ConvertPoint</td><td>$O(d_a + d_b - 2\cdot\mathrm{lca})$</td><td>相邻锚点近常数；场景缓存下跨场景 $O(1)$–$O(d)$</td></tr>
+<tr><td>Find</td><td>$O(d + k + m\log m)$</td><td>邻域展开 + 桶扫描 + 排序；限 Top-N 时排序降为 $O(m\log N)$</td></tr>
+<tr><td>Transfer</td><td>$O(d_a + d_b - 2\cdot\mathrm{lca})$</td><td>两次换算 + 两次桶操作（均摊常数）</td></tr>
+<tr><td>锚点创建（物化）</td><td>均摊 $O(d)$</td><td>哈希插入 + 父链补全，无再平衡</td></tr>
+</tbody>
+</table>
+
+<h1>9　精度分析</h1>
+<h2>9.1　误差的来源隔离</h2>
+<p>系统将浮点误差拆解为三个互不惊扰的通道：（1）<b>平移通道</b>——层级局部坐标，第 $i$ 层的坐标数值被该层 cell 尺寸 $2^{s_i}$ 界定，任意层级的相对精度相同，不再出现"远 jitter"；（2）<b>角度通道</b>——圈数取模纪律（P1、P2），三角函数参数恒有界；（3）<b>合成通道</b>——跨层变换链长 $O(\log)$，四元数乘法的舍入随链长线性累积而非随世界尺度累积，且链上数值全程处于相遇层局部尺度。三个通道的误差上界都只依赖于<b>链长</b>，与世界的绝对尺度无关——这正是层级参考系相对浮动原点的理论优势：浮动原点把误差压到相机附近但以全局更新为代价，层级锚点把"局部"做成了结构的固有属性。</p>
+<h2>9.2　局部坐标类型降格</h2>
+<p>由于每层局部坐标有界，深节点（如半径 1 km 的基地）内的对象坐标可用 float32 存储（1 km 内 float32 有效精度约 0.1 mm），存储与带宽减半；仅跨层合成使用 double。类型选择由节点半径自动推导，对上层透明。</p>
+<h2>9.3　规范化纪律</h2>
+<p>非欧坐标的脏值（如 $lon=181°$、$s$ 超出线路长度）是此类系统最难定位的缺陷源。纪律 P4：所有写入路径强制执行 <code>Normalize</code>——角度回卷到主值区间、沿程坐标越界时钳制或触发向相邻段的 Transfer；读取路径不做隐式修正，使脏值在写入点即暴露。</p>
+
+<h1>10　讨论：能力包络与边界</h1>
+<h2>10.1　包络内的完备性</h2>
+<p>在公理 A1–A4 界定的范围内——层级化（可运动）嵌套参考系下的点目标定位、索引、迁移与近邻查询——本内核没有结构性缺口：多尺度由路径码层级消化，精度由通道隔离消化，运动由 Kinematic 消化，非欧由图卡注入消化，动态负载由"结构跟随变化率"的三层分工消化。剩余问题均为工程实现而非架构障碍。</p>
+<h2>10.2　七类边界外问题</h2>
+<table>
+<caption data-label="表 6">边界外问题及对应外围模块</caption>
+<thead><tr><th>问题类</th><th>缺失的公理</th><th>外围模块</th></tr></thead>
+<tbody>
+<tr><td>时空历史与预测查询（轨迹回放、时段区域查）</td><td>对象只有当前时刻</td><td>轨迹存储 + 时空索引（TPR*<a class="cite" href="#ref-11">[11]</a>、时间片快照）</td></tr>
+<tr><td>拓扑可达与路径规划</td><td>层级包含 ≠ 可达性</td><td>导航图/网格 + 图搜索</td></tr>
+<tr><td>射线求交与连续碰撞</td><td>球域查询 ≠ 射线遍历序</td><td>BVH<a class="cite" href="#ref-5">[5]</a> / 扫掠体查询</td></tr>
+<tr><td>全配对检测（物理 broadphase）</td><td>单点查询 ≠ 对偶问题</td><td>SAP / 专用 broadphase</td></tr>
+<tr><td>高维与非度量相似检索</td><td>低维几何直觉</td><td>LSH / HNSW<a class="cite" href="#ref-12">[12]</a> / 度量树</td></tr>
+<tr><td>分布式一致与多写入者</td><td>单机结构</td><td>以路径码为分片键 + 一致性协议层</td></tr>
+<tr><td>位置不确定性（概率位置）</td><td>点是硬假设</td><td>不确定索引 / 概率阈值查询</td></tr>
+</tbody>
+</table>
+<p>另有一个更隐蔽的内在限制：单树单归属（公理 A2）意味着正交的多视角划分（行政、功能、电磁）无法同树表达，只能择一为主轴、余者外挂辅助索引——这是"树"这一数据结构的本质取舍，而非实现疏漏。</p>
+<h2>10.3　作为几何内核的定位</h2>
+<p>边界外问题的共性是：它们不否定场景树这一骨架，而是需要在其上叠加专用结构。因此本内核的正确定位是<b>几何内核</b>：时空层、图论层、物理层、检索层共享同一棵场景/锚点树作为空间骨架与坐标仲裁者，各自维护自己的索引。这一"内核 + 外围"结构与操作系统中微内核与服务的关系同构。</p>
+
+<h1>11　结论</h1>
+<p>本文针对多尺度、嵌套、运动、异构几何四类压力下的点目标空间索引问题，提出由场景注册表、路径码锚点树与对象桶构成的三层几何内核。其核心洞见有三：锚点与索引的统一（树即参考系层级，路径码即锚点身份）、几何差异的策略化封装（图册—图卡）、静止性的全面兑现（拓扑静止换缓存合法化、虚拟节点换零存储细分、构建期重投入换查询期轻量）。内核在"层级化运动参考系下的点目标索引"问题类上达到结构完备，并以七类边界问题的明确划界，为构建更大的空间行为系统提供了可挂接的骨架。未来工作包括：以路径码为分片键的分布式扩展、对象几何尺寸的显式建模（从点目标到带体积目标）、以及基于真实空天仿真负载的实验评估。</p>
+
+<h1>参考文献</h1>
+<ol class="references">
+<li id="ref-1">Guttman A. R-trees: A dynamic index structure for spatial searching[C]//Proceedings of the 1984 ACM SIGMOD International Conference on Management of Data. New York: ACM, 1984: 47-57.</li>
+<li id="ref-2">Beckmann N, Kriegel H P, Schneider R, et al. The R*-tree: An efficient and robust access method for points and rectangles[C]//Proceedings of the 1990 ACM SIGMOD International Conference on Management of Data. New York: ACM, 1990: 322-331.</li>
+<li id="ref-3">Bentley J L. Multidimensional binary search trees used for associative searching[J]. Communications of the ACM, 1975, 18(9): 509-517.</li>
+<li id="ref-4">Samet H. <i>The Design and Analysis of Spatial Data Structures</i>[M]. Reading: Addison-Wesley, 1990.</li>
+<li id="ref-5">Goldsmith J, Salmon J. Automatic creation of object hierarchies for ray tracing[J]. IEEE Computer Graphics and Applications, 1987, 7(5): 14-20.</li>
+<li id="ref-6">Google. S2 Geometry Library[EB/OL]. [2026-08-09]. https://s2geometry.io/.</li>
+<li id="ref-7">Uber. H3: A hexagonal hierarchical geospatial indexing system[EB/OL]. [2026-08-09]. https://h3geo.org/.</li>
+<li id="ref-8">Thorne C. Using a floating origin to improve fidelity and performance of large, distributed virtual worlds[C]//Proceedings of the Second IEEE International Conference on Cyberworlds. IEEE, 2005: 263-270.</li>
+<li id="ref-9">Ulrich T. Loose octrees[M]//DeLoura M. <i>Game Programming Gems</i>. Hingham: Charles River Media, 2000: 444-453.</li>
+<li id="ref-10">Saltenis S, Jensen C S, Leutenegger S T, et al. Indexing the positions of continuously moving objects[C]//Proceedings of the 2000 ACM SIGMOD International Conference on Management of Data. New York: ACM, 2000: 331-342.</li>
+<li id="ref-11">Tao Y, Papadias D, Sun J. The TPR*-tree: An optimized spatio-temporal access method for predictive queries[C]//Proceedings of the 29th International Conference on Very Large Data Bases. VLDB Endowment, 2003: 790-801.</li>
+<li id="ref-12">Malkov Y A, Yashunin D A. Efficient and robust approximate nearest neighbor search using hierarchical navigable small world graphs[J]. IEEE Transactions on Pattern Analysis and Machine Intelligence, 2020, 42(4): 824-836.</li>
+<li id="ref-13">Morton G M. A computer oriented geodetic data base and a new technique in file sequencing[R]. Ottawa: IBM Ltd., 1966.</li>
+</ol>
+
+</body>
+</html>

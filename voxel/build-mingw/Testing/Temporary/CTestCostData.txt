@@ -1,0 +1,15 @@
+test_types 10 0.0233116
+test_spatial_grid 10 0.0170597
+test_temporal_index 10 0.0199104
+test_block_store 10 0.0189378
+test_version_log 10 0.0255425
+test_persistence 7 0.0715129
+test_shard 8 0.27253
+test_lod 8 0.4133
+test_dynamic 8 0.0486386
+test_arbitration 8 0.0364137
+test_vql 8 0.0885726
+test_shell 0 0
+test_stmb_service 8 0.0354623
+test_e2e 8 0.104291
+---

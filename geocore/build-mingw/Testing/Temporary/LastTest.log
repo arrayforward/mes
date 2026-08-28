@@ -1,0 +1,35 @@
+Start testing: Aug 28 15:20 中国标准时间
+----------------------------------------------------------
+1/2 Testing: unit_tests
+1/2 Test: unit_tests
+Command: "D:/manufacture/geocore/build-mingw/unit_tests.exe"
+Directory: D:/manufacture/geocore/build-mingw
+"unit_tests" start time: Aug 28 15:20 中国标准时间
+Output:
+----------------------------------------------------------
+[unit] passed=75 failed=0
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"unit_tests" end time: Aug 28 15:20 中国标准时间
+"unit_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: e2e_tests
+2/2 Test: e2e_tests
+Command: "D:/manufacture/geocore/build-mingw/e2e_tests.exe"
+Directory: D:/manufacture/geocore/build-mingw
+"e2e_tests" start time: Aug 28 15:20 中国标准时间
+Output:
+----------------------------------------------------------
+[e2e] passed=2901 failed=0
+<end of output>
+Test time =   3.42 sec
+----------------------------------------------------------
+Test Passed.
+"e2e_tests" end time: Aug 28 15:20 中国标准时间
+"e2e_tests" time elapsed: 00:00:03
+----------------------------------------------------------
+
+End testing: Aug 28 15:20 中国标准时间

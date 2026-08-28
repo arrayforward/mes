@@ -1,0 +1,9 @@
+# ninja log v7
+36	2213	8095932120222263	CMakeFiles/geocore.dir/src/scene.cpp.obj	270ad5ee77f216ae
+49	1601	8095932120349612	CMakeFiles/unit_tests.dir/tests/unit_tests.cpp.obj	ceaee36f9455e9cf
+31	1908	8095932120166335	CMakeFiles/geocore.dir/src/anchor_tree.cpp.obj	e21eb171762324db
+42	3671	8095932120278645	CMakeFiles/geocore.dir/src/kernel.cpp.obj	3659d8a6c0de6899
+3672	3823	8095932156570057	libgeocore.a	ce4600ed1c070d38
+3823	3986	8095932158093154	unit_tests.exe	53cf47797974aeb8
+55	3901	8095932120414688	CMakeFiles/e2e_tests.dir/tests/e2e_tests.cpp.obj	32885c40ad4ba4da
+3901	4045	8095932158872092	e2e_tests.exe	63de826e30e2d740

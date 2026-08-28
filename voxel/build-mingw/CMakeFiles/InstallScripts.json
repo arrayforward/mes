@@ -1,0 +1,19 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/manufacture/voxel/build-mingw/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/core/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/index/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/store/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/history/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/dynamic/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/persistence/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/shard/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/service/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/vql/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/agent/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/src/app/cmake_install.cmake",
+		"D:/manufacture/voxel/build-mingw/tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

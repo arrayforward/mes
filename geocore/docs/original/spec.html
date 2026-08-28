@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>空间几何内核：算法与架构说明书</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({startOnLoad:true, theme:'neutral',
+  themeVariables:{primaryColor:'#f5f5f5',primaryTextColor:'#333',primaryBorderColor:'#999',lineColor:'#666'}});
+renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+</script>
+<style>
+@page { size: A4; margin: 2.5cm 2cm;
+  @top-center { content: string(doctitle); font-size:9pt; color:#666; }
+  @bottom-center { content: counter(page); } }
+@page :first { margin: 0; @top-center { content: none; } @bottom-center { content: none; } }
+body { margin:0; padding:0; font-family: Georgia, "Noto Serif SC", "Songti SC", serif;
+  font-size:10.5pt; line-height:1.6; color:#333; text-align:justify; text-align-last:left;
+  string-set: doctitle ""; }
+h1 { string-set: doctitle content(); font-size:15pt; margin-top:1.4em; page-break-after:avoid; border-bottom:1px solid #999; padding-bottom:0.2em; }
+h2 { font-size:12.5pt; margin-top:1.1em; page-break-after:avoid; }
+h3 { font-size:11pt; margin-top:0.9em; page-break-after:avoid; }
+.cover { width:210mm; height:297mm; margin:0; position:relative; overflow:hidden; page-break-after:always; background:white; }
+.cover-content { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; width:80%; }
+.cover-title { font-size:22pt; font-weight:700; margin-bottom:0.8cm; line-height:1.5; }
+.cover-subtitle { font-size:13pt; color:#666; margin-bottom:3cm; }
+.cover-meta { font-size:11pt; line-height:2.2; }
+.toc-page { page-break-after:always; }
+.toc { list-style:none; padding-left:0; }
+.toc li { margin:0.35em 0; font-size:10.5pt; }
+.toc a { text-decoration:none; color:#333; }
+.toc a::after { content: leader('.') target-counter(attr(href url), page); }
+.rule { border-left:3px solid #333; padding-left:1em; margin:1em 0; page-break-inside:avoid; }
+.rule-title { font-weight:bold; }
+.algorithm { border:1px solid #333; padding:0.6em 0.8em; background:white; margin:1em 0; page-break-inside:avoid; font-size:9.3pt; }
+.algorithm-title { font-weight:bold; margin-bottom:0.3em; }
+table { border-collapse:collapse; width:100%; max-width:100%; margin:1em 0; font-size:9.3pt; }
+caption { caption-side:top; text-align:center; font-size:9.5pt; margin-bottom:0.4em; }
+caption::before { content: attr(data-label) "　"; font-weight:bold; }
+thead { display:table-header-group; border-top:1.5px solid #333; border-bottom:1px solid #333; }
+tbody { border-bottom:1.5px solid #333; }
+th, td { padding:0.3em 0.5em; text-align:left; vertical-align:top; }
+tr { page-break-inside:avoid; }
+pre, table, figure, img, svg, .mermaid, blockquote { max-width:100%; box-sizing:border-box; }
+pre { background:#f5f5f5; padding:0.6em; font-size:8.6pt; line-height:1.42; overflow-x:auto; white-space:pre-wrap; word-wrap:break-word; }
+code { font-family:"Courier New", monospace; word-break:break-word; }
+figure { margin:1em 0; text-align:center; page-break-inside:avoid; }
+figcaption { font-size:9.5pt; margin-top:0.3em; }
+figcaption::before { content: attr(data-label) "　"; font-weight:bold; }
+.mermaid { text-align:center; margin:0.8em auto; }
+ul, ol { margin:0.4em 0; padding-left:1.6em; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-content">
+    <div class="cover-title">空间几何内核<br>算法与架构说明书</div>
+    <div class="cover-subtitle">AI 参考实现规范 · 版本 1.0</div>
+    <div class="cover-meta">
+      <p>配套论文：《面向多尺度嵌套参考系的空间几何内核》</p>
+      <p>2026 年 8 月</p>
+    </div>
+  </div>
+</div>
+
+<div class="toc-page">
+<h1>目　录</h1>
+<ul class="toc">
+<li><a href="#s1">1　概述与设计原则</a></li>
+<li><a href="#s2">2　术语、公理与不变式</a></li>
+<li><a href="#s3">3　核心数据结构</a></li>
+<li><a href="#s4">4　核心算法</a></li>
+<li><a href="#s5">5　精度纪律</a></li>
+<li><a href="#s6">6　并发模型</a></li>
+<li><a href="#s7">7　API 参考</a></li>
+<li><a href="#s8">8　测试与验证清单</a></li>
+<li><a href="#s9">9　实现检查表与已知边界</a></li>
+</ul>
+</div>
+
+<h1 id="s1">1　概述与设计原则</h1>
+<p>本说明书是空间几何内核的可实现规范，面向 AI 编码代理与人类工程师：给出完整的数据结构定义、核心算法伪码、精度与并发纪律、API 契约及测试清单。实现语言不设限；伪码采用类 C++ 记号。</p>
+<p>内核解决的目标问题：<b>在层级化（可运动、可非欧）嵌套参考系下，对点目标进行定位、索引、迁移与半径近邻查询</b>，尺度动态范围不受浮点限制。</p>
+<h2>1.1　设计原则</h2>
+<ol>
+<li><b>结构跟随变化率。</b>变化越快的层结构越简单：对象层用扁平数组，几何层用编码 + 哈希，语义层用目录。</li>
+<li><b>身份是函数，不是记录。</b>无限细分的东西不能被存储，只能被计算：锚点身份 = 路径码 = 坐标的纯函数。</li>
+<li><b>静止换一切。</b>拓扑静止是最大资产：它换来缓存合法化、零存储细分、无再平衡、离线烘焙。</li>
+<li><b>非欧不出边界。</b>任何几何奇异（球面、弧长、周期角）都封装在场景内，跨边界一律欧氏化。</li>
+<li><b>精度是纪律，不是运气。</b>平移精度靠层级、角度精度靠取模、合成精度靠链长控制，全部以强制纪律落实。</li>
+</ol>
+<h2>1.2　三层架构</h2>
+<figure id="fig-1">
+<div class="mermaid">
+flowchart LR
+    subgraph L1[场景注册表 约1000]
+        S1[主表] --- S2[名字哈希] --- S3[标签倒排] --- S4[SoA包围体]
+    end
+    subgraph L2[路径码锚点树 物化百万级]
+        T1[路径码纯函数] --- T2[物化哈希表] --- T3[变换缓存]
+    end
+    subgraph L3[对象桶 百万级以上]
+        B1[扁平数组] --- B2[桶哈希]
+    end
+    L1 -->|rootPath| L2 -->|归属路径| L3
+</div>
+<figcaption data-label="图 1">三层架构：各层规模、变化率、结构互不相同的根源是访问模式差异。</figcaption>
+</figure>
+
+<h1 id="s2">2　术语、公理与不变式</h1>
+<h2>2.1　术语</h2>
+<table>
+<caption data-label="表 1">术语表</caption>
+<thead><tr><th>术语</th><th>定义</th></tr></thead>
+<tbody>
+<tr><td>锚点（Anchor）</td><td>带局部坐标系的空间区域；树中节点；分语义锚点（手工、命名、可动）与匿名锚点（规则细分、静止）</td></tr>
+<tr><td>场景（Scene）</td><td>锚点子树的语义命名与生命周期单元；在全局树上声明挂载点 rootPath；注入坐标模型</td></tr>
+<tr><td>路径码（AnchorPath）</td><td>从根到锚点的逐段子区编号序列；锚点身份；坐标的纯函数</td></tr>
+<tr><td>虚拟节点 / 物化节点</td><td>路径可算即存在（零存储）/ 哈希表中有记录（含对象或子锚点）</td></tr>
+<tr><td>Kinematic</td><td>语义锚点的运动学：变换作为时间 $t$ 的函数</td></tr>
+<tr><td>CoordinateModel</td><td>场景的坐标策略：转移映射、度量、划分、规范化</td></tr>
+<tr><td>LCA</td><td>两条路径的最近公共祖先 = 最长公共前缀</td></tr>
+</tbody>
+</table>
+<h2>2.2　公理（不可违反）</h2>
+<div class="rule"><span class="rule-title">A1 拓扑静止。</span>锚点父子关系创建后不变；运动只改变变换参数。</div>
+<div class="rule"><span class="rule-title">A2 单归属。</span>任一对象任一时刻恰有一条归属路径；对象挂在尺度恰好容纳它的最深节点。</div>
+<div class="rule"><span class="rule-title">A3 运动局限于语义节点。</span>匿名节点相对其父静止（无旋转、规则平移），保证路径码可计算。</div>
+<div class="rule"><span class="rule-title">A4 边界欧氏化。</span>非欧性不穿透场景边界；跨边界一律换算为父场景坐标。</div>
+<h2>2.3　不变式（每次写操作后必须成立）</h2>
+<ol>
+<li><b>INV-1 物化最小性：</b>哈希表中恰有"含对象或含物化子节点"的路径；空物化节点可回收（惰性）。</li>
+<li><b>INV-2 归属最深性：</b>对象的归属路径是其尺度可容纳的最深节点；Find 无需跨层去重。</li>
+<li><b>INV-3 坐标原生性：</b>对象坐标以其所属场景的 CoordinateModel 原生形式存储且已 Normalize。</li>
+<li><b>INV-4 缓存一致性：</b>变换缓存的失效条件 = 路径变更或帧切换；任何写入路径不得读旧帧缓存。</li>
+<li><b>INV-5 迁移原子性：</b>Transfer 先写新桶后删旧桶，任意并发读取至少在一处可见对象。</li>
+</ol>
+
+<h1 id="s3">3　核心数据结构</h1>
+<h2>3.1　路径码 AnchorPath</h2>
+<pre>// 变长层级路径。codes[i] 为第 i 层子区编号（欧氏场景为 Morton 位组 0..7）。
+// 定长上限 MAX_DEPTH（如 32）时可用定长数组 + depth，避免堆分配。
+struct AnchorPath {
+    uint32_t codes[MAX_DEPTH];   // 或 SmallVector
+    uint8_t  depth;
+
+    AnchorPath Parent()      const;        // depth-1，O(1) 视图或拷贝
+    AnchorPath Prefix(int d) const;        // 前 d 段
+    bool       IsPrefixOf(const AnchorPath& other) const;
+    uint64_t   HashKey() const;            // 定长编码的哈希键（深度打包进高位）
+};
+int LcaDepth(const AnchorPath& a, const AnchorPath& b);  // 最长公共前缀长度</pre>
+<p>编码建议：深度 ≤ 21 且每段 3 bit 时，可将整条路径打包进单个 uint64（深度置高位），哈希与比较退化为整数运算；含语义锚点命名段的场景，语义段用独立命名空间编号而非 Morton 位组。</p>
+<h2>3.2　运动学 Kinematic</h2>
+<pre>struct Kinematic {
+    enum class Type : uint8_t { Static, CircularOrbit, PathConstrained };
+
+    // Static（匿名节点恒为此型的特例：origin 规则生成，rotation = 单位四元数）
+    Vec3d      origin;
+    Quaternion rotation;
+
+    // CircularOrbit（行星等）
+    double     orbitRadius;    // 轨道半径（父系单位）
+    double     period;         // 公转周期（秒）——存周期不存角速度，见 P2
+    double     phase0;         // 初始相位（圈数 [0,1)）
+    Quaternion orbitalPlane;   // 轨道面朝向
+    double     spinPeriod;     // 自转周期；0 = 不自转
+
+    // PathConstrained（列车/飞机等一维约束）
+    SplineId   path;           // 线路样条
+    Timetable  timetable;      // s(t) 查询
+
+    Vec3d      OriginAt(double t)   const;
+    Quaternion RotationAt(double t) const;
+    Vec3d      OriginVelAt(double t) const;   // 解析导数；Transfer 速度切换必需
+};</pre>
+<pre>Vec3d Kinematic::OriginAt(double t) const {           // CircularOrbit 分支
+    double turns = fmod(phase0 + t / period, 1.0);    // P1：圈数取模
+    if (turns < 0) turns += 1.0;
+    double s, c;  sincos(2.0 * PI * turns, &s, &c);
+    return orbitalPlane * Vec3d{orbitRadius * c, orbitRadius * s, 0.0};
+}</pre>
+<h2>3.3　坐标模型 CoordinateModel</h2>
+<pre>// 策略注入点。建议 std::variant&lt;Euclidean, Spherical, Orbital, Moving1D&gt; 静态分派，
+// Euclidean 为快路径；每对象高频调用的 Distance/CellOf 禁止虚函数。
+struct CoordinateModel {                       // 概念接口
+    Vec3d  ToParent  (Vec3d local,  double t) const;   // 图卡边界：转移映射
+    Vec3d  FromParent(Vec3d parent, double t) const;
+    double DistanceSq(Vec3d a, Vec3d b) const;         // 场景度量（平方域）
+    PathSeg CellOf(Vec3d p, int level) const;          // 场景内划分
+    void  NeighborCells(Vec3d center, double radius,   // 邻域展开（半径语义归场景）
+                        std::vector&lt;PathSeg&gt;& out) const;
+    Vec3d Normalize(Vec3d p) const;                    // 写入时强制执行（P4）
+};</pre>
+<table>
+<caption data-label="表 2">内置坐标模型要点</caption>
+<thead><tr><th>模型</th><th>原生坐标</th><th>DistanceSq</th><th>CellOf</th><th>Normalize 要点</th></tr></thead>
+<tbody>
+<tr><td>Euclidean3D</td><td>$(x,y,z)$</td><td>$\Delta x^2+\Delta y^2+\Delta z^2$</td><td>Morton 量化（右移）</td><td>无操作</td></tr>
+<tr><td>SphericalSurface</td><td>$(lat,lon,alt)$</td><td>haversine 大圆距离平方（近似）</td><td>S2 式 cell / 经纬分带</td><td>lon 回卷 $(-180,180]$，lat 钳制</td></tr>
+<tr><td>Orbital</td><td>$(r,\theta,h)$ 或轨道要素</td><td>轨道系内欧氏</td><td>沿径向/角向分层</td><td>$\theta$ 回卷（圈数）</td></tr>
+<tr><td>MovingFrame1D</td><td>$(s,\text{lat},h)$</td><td>$|\Delta s|$ 为主，横向为辅</td><td>里程分段 / 车厢</td><td>$s$ 越界钳制或触发段间 Transfer</td></tr>
+</tbody>
+</table>
+<h2>3.4　场景 Scene 与注册表 SceneRegistry</h2>
+<pre>struct Scene {
+    SceneId         id;
+    std::string     name;
+    uint64_t        tagMask;        // 标签 ≤64 种时位掩码
+    AnchorPath      rootPath;       // 挂载点：与锚点树的唯一接口
+    Transform       rootTransform;  // 烘焙：到全局根的累积变换（含逆），Static 链有效
+    Transform       invRootTransform;
+    BoundingSphere  bounds;         // 运动场景取扫掠包络，注册时算一次
+    SceneState      state;          // Resident / Loaded / Dormant / Unloaded
+    CoordinateModel model;          // 注入的坐标策略
+    // Dormant 时必须保留：rootPath、rootTransform、语义锚点的 Kinematic 表
+};
+
+class SceneRegistry {
+    std::vector&lt;Scene&gt; scenes_;                    // 主表，id 即下标
+    std::unordered_map&lt;std::string, SceneId&gt; byName_;
+    std::array&lt;std::vector&lt;SceneId&gt;, 64&gt; byTag_;    // 标签倒排
+    // 空间入口：bounds 抽 SoA（cx[],cy[],cz[],r[]），千级直接 SIMD 扫，不建索引
+public:
+    SceneId OwnerOf(const AnchorPath& p) const;     // rootPath 最长前缀匹配，排序+二分
+};</pre>
+<h2>3.5　锚点树节点与对象记录</h2>
+<pre>struct NodeData {                 // 物化节点记录（仅非空路径占用）
+    AnchorPath          path;
+    Kinematic           kinematic;   // 语义节点；匿名节点为规则生成的 Static
+    std::vector&lt;ObjRef&gt; bucket;      // 对象桶：扁平数组
+    std::vector&lt;AnchorPath&gt; children; // 物化子节点（虚拟子节点不登记）
+    bool                semantic;    // 语义节点不可自动回收
+};
+std::unordered_map&lt;uint64_t, NodeData&gt; nodes_;   // HashKey(path) → NodeData
+
+struct ObjectRecord {
+    ObjectId   id;
+    AnchorPath anchor;              // 归属路径（INV-2）
+    Vec3d      pos;                 // 场景原生坐标（INV-3）；深节点可 float32
+    Vec3d      vel;
+    // 几何尺寸不显式存储：由归属深度隐式表达
+};</pre>
+<h2>3.6　缓存结构</h2>
+<pre>struct FrameCache {               // 帧级缓存（INV-4）
+    double    t;                  // 帧时间戳
+    AnchorPath lastQueryPath;     // 时间局部性：下次查询从此求 LCA
+    std::unordered_map&lt;uint64_t, Transform&gt; toSceneRoot;  // 物化节点→场景根
+    void BeginFrame(double tNew); // t 变化即整体失效
+};</pre>
+
+<h1 id="s4">4　核心算法</h1>
+<h2>4.1　点定位 AnchorOf</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S1　AnchorOf（纯函数，O(d)）</div>
+<pre>AnchorPath AnchorOf(const Scene& sc, Vec3d p, double eps):
+    path = sc.rootPath;  q = p
+    while CellSize(sc.model, path) > eps:
+        c    = sc.model.CellOf(q, path.depth + 1)   // Euclidean：右移位运算
+        path = path.Append(c)
+        q    = ChildLocalOffset(q, c)               // 进入子区局部坐标
+    return path                                      // 不需查任何表</pre></div>
+<h2>4.2　节点变换解析 TransformAt</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S2　TransformAt（虚拟/物化统一入口）</div>
+<pre>Transform TransformAt(const AnchorPath& path, double t, const FrameCache& fc):
+    if (auto it = nodes_.find(path.HashKey()); it != nodes_.end())
+        return { it->second.kinematic.OriginAt(t),
+                 it->second.kinematic.RotationAt(t) };
+    // 虚拟节点：规则生成（A3 保证可计算）
+    seg   = path.LastSeg()
+    parent = path.Parent()
+    return { QuantizedChildOrigin(parent, seg), Quaternion::Identity() };</pre></div>
+<h2>4.3　坐标换算 Convert</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S3　ConvertPoint / ConvertDirection（LCA 行走）</div>
+<pre>Vec3d ConvertPoint(AnchorPath from, AnchorPath to, Vec3d p, double t):
+    lca = LcaDepth(from, to);  cur = from
+    for (d = from.depth; d > lca; --d):            // 上行 子→父
+        tr = TransformAt(cur, t, fc)
+        p  = tr.rotation * p + tr.origin
+        cur = cur.Parent()
+    for (d = lca + 1; d <= to.depth; ++d):         // 下行 父→子
+        tr = TransformAt(to.Prefix(d), t, fc)
+        p  = tr.rotation.Conjugate() * (p - tr.origin)
+    return p
+
+Vec3d ConvertDirection(from, to, v, t):            // 无平移，仅逐层旋转
+    （同上骨架，去掉 origin 项）</pre></div>
+<div class="algorithm"><div class="algorithm-title">算法 S4　ConvertVelocity（含参考系牵连项，§论文 7.4）</div>
+<pre>Vec3d ConvertVelocity(from, to, p, v, t):
+    // 上行逐步：v ← R·v + ω×(R·p) + OriginVelAt(t)；下行逐步取逆。
+    // ω 由 RotationAt 的解析导数或相邻帧差分给出；圆轨道有闭式。
+    // 铁律：与 ConvertPoint 同帧同 t，成对调用。</pre></div>
+<h2>4.4　跨场景换算</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S5　Convert（统一入口，含场景仲裁）</div>
+<pre>Vec3d Convert(AnchorPath from, AnchorPath to, Vec3d p, double t):
+    sa = registry_.OwnerOf(from);  sb = registry_.OwnerOf(to)
+    if (sa == sb) return ConvertPoint(from, to, p, t)
+    lca = LcaDepth(from, to)
+    if (lca >= min(from.depth, to.depth) - 2)      // 近亲：行走（LCA 深，精度好）
+        return ConvertPoint(from, to, p, t)
+    // 远亲：烘焙矩阵 O(1)
+    pa = LocalToSceneRoot(sa, from, p, t)          // 场景内短行走
+    return scenes_[sb].invRootTransform * (scenes_[sa].rootTransform * pa)</pre></div>
+<p>热场景对（如主场景↔常驻副本）缓存合成矩阵 $M_{B}^{-1}M_A$，跨场景换算降为一次矩阵乘法；缓存键 = (sa, sb)，失效条件 = 任一方 rootTransform 变更（注册事件驱动）。</p>
+<h2>4.5　近邻查询 Find</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S6　Find（两阶段：结构层收集 + 数据层过滤）</div>
+<pre>vector&lt;ObjRef&gt; Find(SceneId sid, AnchorPath ctx, Vec3d center, double radius,
+                     double t, size_t topN = SIZE_MAX):
+    const Scene& sc = scenes_[sid]
+    // 阶段一
+    base  = AnchorOf(sc, center, EpsFor(radius))          // S1
+    cells = sc.model.NeighborCells(ChildLocal(center, base), radius)
+    cand  = []
+    for (c : cells)
+        if (auto it = nodes_.find(base.ReplaceLastSegs(c).HashKey()); it != end)
+            cand.append(it->second.bucket)                // 虚拟节点零成本跳过
+    // 阶段二（平方域，延迟开方）
+    r2 = radius * radius
+    hits = [o | o ∈ cand, sc.model.DistanceSq(o.pos, center) ≤ r2]
+    if (topN == SIZE_MAX) sort(hits, by DistanceSq)
+    else                  partial_sort(hits, topN, by DistanceSq)
+    return hits</pre></div>
+<p>跨场景 Find：先 Convert 查询中心到目标场景（S5），半径以边界点重估 $r' \approx r \cdot \|\partial \text{ToParent}/\partial x\|$（有界近似，需在文档中声明），再调 S6；祖先重叠由 INV-2 保证不产生重复命中。</p>
+<h2>4.6　迁移 Transfer 与增删</h2>
+<div class="algorithm"><div class="algorithm-title">算法 S7　Transfer（先写后删，INV-5）</div>
+<pre>void Transfer(ObjectRecord& o, AnchorPath to, double t):
+    p' = ConvertPoint   (o.anchor, to, o.pos, t)
+    v' = ConvertVelocity(o.anchor, to, o.pos, o.vel, t)
+    p' = SceneOf(to).model.Normalize(p')               // P4：写入即规范化
+    BucketAt(to).Insert(o.id)                          // 1. 先写新
+    BucketAt(o.anchor).Remove(o.id)                    // 2. 后删旧
+    o.anchor = to; o.pos = p'; o.vel = v'              // 3. 提交归属
+
+void Save(SceneId sid, Vec3d posNative, ...):
+    pos  = Normalize(posNative)
+    path = AnchorOf(sc, pos, EpsFor(objSize))          // INV-2：最深容纳
+    nodes_.MaterializeChain(path)                      // 惰性物化父链
+    BucketAt(path).Insert(...)</pre></div>
+
+<h1 id="s5">5　精度纪律</h1>
+<table>
+<caption data-label="表 3">精度纪律一览（全部强制）</caption>
+<thead><tr><th>编号</th><th>纪律</th><th>机制</th><th>违反后果</th></tr></thead>
+<tbody>
+<tr><td>P1</td><td>圈数取模</td><td>相位存圈数，求值前 <code>fmod(·,1.0)</code>，sin/cos 参数恒在 $[0,2\pi)$</td><td>长期运行后角度漂移</td></tr>
+<tr><td>P2</td><td>存周期不存角速度</td><td>$t/T$ 一次除法代替 $\omega t$ 后取模</td><td>相位误差放大一个量级</td></tr>
+<tr><td>P3</td><td>同一时刻求值</td><td>一次换算链共享帧时间 $t$，由调用方传入</td><td>运动链不封闭，变换不可逆</td></tr>
+<tr><td>P4</td><td>写入即规范化</td><td>所有写入路径过 <code>Normalize</code>；读取不隐式修正</td><td>脏坐标（$lon{=}181°$ 等）扩散</td></tr>
+<tr><td>P5</td><td>LCA 行走，不绕根</td><td>换算链长 $= d_a+d_b-2\cdot\mathrm{lca}$，中间坐标不出相遇层尺度</td><td>大数抵消，深空换算失真</td></tr>
+<tr><td>P6</td><td>局部类型降格</td><td>节点半径 &lt; 阈值（如 10 km）时对象坐标用 float32 存储</td><td>（仅浪费存储带宽，可选）</td></tr>
+<tr><td>P7</td><td>平方域比较</td><td>Find 过滤与排序用 DistanceSq，仅结果开方</td><td>（性能损失，非正确性）</td></tr>
+<tr><td>P8</td><td>烘焙用 double 合成</td><td>rootTransform 注册时以 double 全程连乘，一次落盘</td><td>逐层截断误差累积进缓存</td></tr>
+</tbody>
+</table>
+<p>三通道误差模型（详见论文第 9 节）：平移误差界、角度误差界、合成误差界均只依赖链长与层级数，与世界绝对尺度无关。实现验收时应能以该模型逐通道归因任何超差。</p>
+
+<h1 id="s6">6　并发模型</h1>
+<ul>
+<li><b>读写锁：</b>锚点树物化表与对象桶使用 <code>shared_mutex</code>——查询并发、写入互斥；桶级锁而非全局锁，锁粒度 = 物化节点。</li>
+<li><b>帧缓存线程化：</b>FrameCache 每线程一份；<code>BeginFrame</code> 在主循环推进，写入方严禁跨帧复用（INV-4）。</li>
+<li><b>Transfer 并发语义：</b>先写后删保证任意读至少在一桶可见对象；查询方对"双桶短暂同见"的容忍由 INV-2 的查询路径唯一性兜底——同一查询路径只扫一桶，不会重复返回。</li>
+<li><b>注册表冻结窗口：</b>场景注册/注销走 RCU 或停止世界窗口；查询热路径对注册表只读。</li>
+<li><b>路径码无锁友好：</b>AnchorOf、LCA、Convert（纯行走部分）为无共享纯计算，天然可并行；锁只出现在 TransformAt 查表与桶扫描两处。</li>
+</ul>
+
+<h1 id="s7">7　API 参考</h1>
+<table>
+<caption data-label="表 4">公开 API（伪签名）</caption>
+<thead><tr><th>API</th><th>签名</th><th>语义与契约</th></tr></thead>
+<tbody>
+<tr><td>CreateScene</td><td><code>(name, tags, rootPath, model, kinematic?) → SceneId</code></td><td>注册场景并烘焙 rootTransform（P8）；rootPath 不得与既有场景互相包含，除非显式声明父子场景</td></tr>
+<tr><td>SetSceneState</td><td><code>(SceneId, SceneState)</code></td><td>Resident/Loaded/Dormant/Unloaded；Dormant 保留元数据，释放物化数据</td></tr>
+<tr><td>Save</td><td><code>(SceneId, posNative, vel, objSize) → ObjectId</code></td><td>Normalize（P4）→ AnchorOf（INV-2）→ 惰性物化 → 插桶</td></tr>
+<tr><td>Remove</td><td><code>(ObjectId)</code></td><td>删桶项；桶空后惰性回收物化节点（语义节点除外）</td></tr>
+<tr><td>Transfer</td><td><code>(ObjectId, AnchorPath to, t)</code></td><td>S7；位置速度成对换算（含参考系项）；先写后删</td></tr>
+<tr><td>Find</td><td><code>(SceneId, ctx, center, radius, t, topN?) → [ObjRef]</code></td><td>S6；半径语义归场景；结果按距离升序</td></tr>
+<tr><td>FindCrossScene</td><td><code>(SceneId target, ctx, center, radius, t, topN?)</code></td><td>中心过 S5，半径边界重估（有界近似）</td></tr>
+<tr><td>Convert</td><td><code>(from, to, p, t) → Vec3d</code></td><td>S5；近亲行走、远亲烘焙、热对缓存</td></tr>
+<tr><td>BeginFrame</td><td><code>(t)</code></td><td>推进帧缓存（INV-4）；一帧内所有换算共享此 t（P3）</td></tr>
+<tr><td>OwnerOf</td><td><code>(AnchorPath) → SceneId</code></td><td>最长前缀匹配；<code>kInvalid</code> 表示全局公共区域</td></tr>
+</tbody>
+</table>
+
+<h1 id="s8">8　测试与验证清单</h1>
+<h2>8.1　不变式测试</h2>
+<ol>
+<li><b>T-INV-1：</b>随机插入/删除 $10^6$ 次后，物化表恰好覆盖非空区域（无空洞、无冗余空节点，语义节点除外）。</li>
+<li><b>T-INV-2：</b>任意对象，其子锚点不存在可容纳它的更深物化节点；Find 结果集无重复 id。</li>
+<li><b>T-INV-3：</b>注入非法坐标（$lon{=}181°$、$s{<}0$），Save 后存储值必为规范化主值。</li>
+<li><b>T-INV-5：</b>多线程并发 Transfer + Find 压测，无丢失对象、无重复返回、无死锁。</li>
+</ol>
+<h2>8.2　精度测试</h2>
+<ol>
+<li><b>T-P1：</b>圆轨道锚点 $t$ 推进 $10^9$ s 后，OriginAt 与 $t{=}0$ 同相位处偏差 &lt; 机器精度 $\times$ 常数。</li>
+<li><b>T-P3/P5：</b>往返换算一致性——随机锚点对，$\mathrm{Convert}(b,a,\mathrm{Convert}(a,b,p))$ 与 $p$ 的相对误差 &lt; $10^{-12}$（同尺度局部），且绕 LCA 路径与绕根路径对比，前者误差严格不大于后者。</li>
+<li><b>T-P-尺度：</b>在 $10^{11}$ m 锚点与 $10^{-2}$ m 锚点各放对象，互换算往返，相对误差不随路径两端尺度差恶化（误差只随链长增长）。</li>
+</ol>
+<h2>8.3　功能与场景测试</h2>
+<ol>
+<li><b>T-F-邻域：</b>跨 cell 边界的半径查询不漏对象（边界两侧各放对象对拍暴力结果）。</li>
+<li><b>T-F-球面：</b>SphericalSurface 场景中，跨反经线（$lon{=}\pm180°$）的邻域展开正确；大圆距离与对拍一致。</li>
+<li><b>T-F-列车：</b>MovingFrame1D 中对象驶出线路末端时触发段间 Transfer 或钳制，行为符合规格。</li>
+<li><b>T-F-休眠：</b>目标场景 Dormant 时 Convert 仍正确（元数据可用），Find 返回"场景未加载"错误而非崩溃。</li>
+<li><b>T-F-速度：</b>自转行星表面静止物体 Transfer 到轨道锚点后，速度包含表面线速度项（与解析解对拍）。</li>
+</ol>
+<h2>8.4　性能基准（参考目标）</h2>
+<table>
+<caption data-label="表 5">性能参考目标（单机，$10^6$ 物化节点 / $10^7$ 对象）</caption>
+<thead><tr><th>操作</th><th>目标</th><th>备注</th></tr></thead>
+<tbody>
+<tr><td>Find（场景内，半径适中）</td><td>&lt; 10 μs</td><td>路径缓存命中时</td></tr>
+<tr><td>Convert（相邻锚点）</td><td>&lt; 100 ns</td><td>LCA 差 ≤2 层</td></tr>
+<tr><td>Convert（跨场景热对）</td><td>&lt; 50 ns</td><td>合成矩阵缓存命中</td></tr>
+<tr><td>Transfer</td><td>&lt; 1 μs</td><td>含两次换算与两次桶操作</td></tr>
+<tr><td>OwnerOf</td><td>&lt; 200 ns</td><td>1000 条 rootPath 二分</td></tr>
+</tbody>
+</table>
+
+<h1 id="s9">9　实现检查表与已知边界</h1>
+<h2>9.1　实现检查表（按依赖序）</h2>
+<ol>
+<li>AnchorPath：定长编码、Parent/Prefix/IsPrefixOf/HashKey、LcaDepth —— 全库地基，先行冻结。</li>
+<li>Kinematic：Static + CircularOrbit（PathConstrained 可后补），OriginAt/RotationAt/OriginVelAt + P1/P2。</li>
+<li>CoordinateModel：Euclidean3D 先行（variant 快路径），SphericalSurface 次之。</li>
+<li>物化表 + TransformAt（虚拟/物化统一）+ 惰性物化链。</li>
+<li>ConvertPoint/Direction/Velocity（S3/S4）+ T-P 精度测试。</li>
+<li>对象桶 + Save/Remove/Transfer（S7）+ INV 测试。</li>
+<li>Find（S6，平方域 + topN）。</li>
+<li>SceneRegistry（主表/名字/标签/SoA/OwnerOf）+ 跨场景 Convert（S5）+ 烘焙缓存。</li>
+<li>FrameCache 与并发模型（读写锁、RCU 窗口）。</li>
+<li>性能基准与 P6 类型降格（可选优化）。</li>
+</ol>
+<h2>9.2　已知边界（不实现，属外围模块）</h2>
+<p>时空历史与预测查询、拓扑可达与路径规划、射线求交与连续碰撞、全配对检测、高维相似检索、分布式一致、位置不确定性——七类问题在本内核公理之外（见论文第 10 节），应作为挂接在场景树骨架上的外围模块另行设计；多视角正交划分（行政/功能/电磁）以辅助索引外挂，不入主树。</p>
+<h2>9.3　常见实现错误预警</h2>
+<table>
+<caption data-label="表 6">高发错误与预防</caption>
+<thead><tr><th>错误</th><th>症状</th><th>预防</th></tr></thead>
+<tbody>
+<tr><td>相位存弧度且累积</td><td>运行数日后天体位置跳变</td><td>P1 强制；代码评审拦截 <code>theta += w*dt</code></td></tr>
+<tr><td>换算链逐层取系统时间</td><td>高速参考系下往返换算不封闭</td><td>P3：t 只能来自帧参数，接口不暴露无 t 重载</td></tr>
+<tr><td>Transfer 只换坐标不换速度</td><td>物体迁移后速度莫名丢失/激增</td><td>API 强制成对（S7），删除"只换坐标"入口</td></tr>
+<tr><td>Find 跨层去重集合回潮</td><td>性能劣化且语义混乱</td><td>依赖 INV-2；添加去重集合即违反架构</td></tr>
+<tr><td>对 1000 个场景建空间索引</td><td>过度设计，常数反而更大</td><td>SoA + SIMD 线性扫已最优（见论文 §6）</td></tr>
+<tr><td>虚拟节点落库</td><td>存储爆炸、点定位变慢</td><td>TransformAt 规则生成分支不可绕过</td></tr>
+</tbody>
+</table>
+
+</body>
+</html>

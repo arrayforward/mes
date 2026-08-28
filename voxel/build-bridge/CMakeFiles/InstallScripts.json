@@ -1,0 +1,21 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/manufacture/voxel/build-bridge/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/unistore/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/bridge/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/core/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/index/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/store/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/history/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/dynamic/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/persistence/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/shard/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/service/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/vql/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/agent/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/src/app/cmake_install.cmake",
+		"D:/manufacture/voxel/build-bridge/tests/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
