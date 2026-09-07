@@ -14,7 +14,9 @@
 // 退出码:0 = 全部关键环节符合预期;非 0 = 有红线被打破。
 // ============================================================================
 
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <map>
@@ -25,6 +27,7 @@
 #include "entitytree/backends/memory_store.h"
 #include "entitytree/model.h"
 #include "mse/http_server.h"
+#include "mse/plc_filter.h"
 #include "mse/projection.h"
 #include "mse/seeds.h"
 #include "mse/system.h"
@@ -52,15 +55,23 @@ static void section(const char* title) {
 // ---- HTTP 驱动辅助 ----
 static uint16_t g_port = 0;
 
-// POST /events 并打印类型与回执(拦截的打印 violations);返回回执 JSON
-static json post_event(const json& payload, const std::string& note = "") {
+// POST /events 并打印类型与回执(拦截的打印 violations);返回回执 JSON。
+// token 非空时携带 X-MSE-Token 凭证头(信任分级:凭证 → 信任级)。
+static json post_event(const json& payload, const std::string& note = "",
+                       const std::string& token = "") {
+    const std::map<std::string, std::string> headers =
+        token.empty() ? std::map<std::string, std::string>{}
+                      : std::map<std::string, std::string>{{"X-MSE-Token", token}};
     const auto [status, body] =
-        mse::http_request("127.0.0.1", g_port, "POST", "/events", payload.dump());
+        mse::http_request("127.0.0.1", g_port, "POST", "/events", payload.dump(), headers);
     const json r = json::parse(body, nullptr, false);
     const std::string type = payload.value("type", "?");
     if (status == 200 && r.is_object() && r.value("status", "") == "settled") {
         std::printf("  POST %-22s → 结算 event_id=%lld %s\n", type.c_str(),
                     (long long)r["event_id"].get<int64_t>(), note.c_str());
+    } else if (status == 200 && r.is_object() && r.value("status", "") == "accepted") {
+        std::printf("  POST %-22s → 已受理 queue_seq=%lld(异步:drain 后落账)%s\n",
+                    type.c_str(), (long long)r["queue_seq"].get<int64_t>(), note.c_str());
     } else {
         std::string viol;
         if (r.is_object() && r.contains("violations"))
@@ -69,6 +80,10 @@ static json post_event(const json& payload, const std::string& note = "") {
                     r.is_object() ? r.value("layer", -1) : -1, viol.c_str(), note.c_str());
     }
     return r;
+}
+
+static bool accepted(const json& receipt) {
+    return receipt.is_object() && receipt.value("status", "") == "accepted";
 }
 
 static json get_view(const std::string& path_with_query) {
@@ -97,6 +112,19 @@ static bool violations_contain(const json& receipt, const std::string& needle) {
 static bool double_eq(const json& v, double expect) {
     return v.is_number() && std::fabs(v.get<double>() - expect) < 1e-9;
 }
+
+// 确定性伪随机(LCG;演示不读物理随机数,噪声流逐比特可复现)
+struct Lcg {
+    uint64_t s;
+    explicit Lcg(uint64_t seed) : s(seed) {}
+    uint32_t next() {
+        s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<uint32_t>(s >> 33);  // 取高 31 位
+    }
+    double uniform(double lo, double hi) {
+        return lo + (hi - lo) * (static_cast<double>(next()) / 2147483647.0);
+    }
+};
 
 // ---- 视图格式化打印 ----
 static void print_terminal_view(const char* title, const json& view) {
@@ -234,6 +262,9 @@ int main() {
                 sys.defs().rules().size(), sys.defs().anchors().size());
     std::printf("  knowledge 协助:%s\n", sys.knowledge().loaded() ? "已加载" : "未加载");
 
+    // 信任分级:凭证 → 信任级(HTTP 头 X-MSE-Token 查表;未携带/未登记 → 0)
+    sys.api().set_trust_tokens({{"plc-gw-01", 1}, {"mes-admin", 3}});
+
     mse::HttpServer server;
     const bool listening = server.listen_on("127.0.0.1", 0, [&sys](const mse::HttpRequest& req) {
         if (req.method == "POST" && req.path == "/events") {
@@ -241,8 +272,11 @@ int main() {
             if (payload.is_discarded())
                 return mse::HttpResponse{400, "application/json; charset=utf-8",
                                          "{\"error\":\"bad json\"}"};
+            int trust = 0;  // 凭证头 → 信任级
+            if (auto it = req.headers.find("x-mse-token"); it != req.headers.end())
+                trust = sys.api().trust_of(it->second);
             return mse::HttpResponse{200, "application/json; charset=utf-8",
-                                     sys.api().post_events(payload).dump()};
+                                     sys.api().post_events(payload, trust).dump()};
         }
         if (req.method == "GET" && req.path.rfind("/views/", 0) == 0) {
             return mse::HttpResponse{
@@ -509,6 +543,80 @@ int main() {
                                    {"actor", "pmc-collector"}, {"产量计数", 2},
                                    {"停线计数", 1}, {"首次合格数", 2}, {"缓冲区计数", 5}})),
                "计数更新未结算");
+
+    // ========================================================================
+    section("3.5 PLC 噪声洪峰:适配层三层过滤 + 异步结算 + 信任分级");
+    // ========================================================================
+    // 工位01 占用光电:100000 个含噪采样(LCG 确定性)灌入适配层;
+    // 真实信号只翻转 2 次(空闲→占用→空闲)——验证噪声洪峰下事件率有界。
+    {
+        mse::PlcFilter filter("工位01-占用光电", mse::PlcFilter::Config{1.0, 0.0, 3, 0});
+        mse::AdapterGateway gw;
+        mse::AdapterGateway::EdgeMapping m;
+        m.type = "PlcEdgeReported";  // async + min_trust=1(种子定义)
+        m.target_id = "工位01";
+        m.key = "工位占用";
+        m.high_value = "占用";
+        m.low_value = "空闲";
+        m.anchor = "整车厂/总装车间/总装线/工位01";
+        gw.map_edge("工位01-占用光电", m);
+
+        constexpr int64_t kSamples = 100000;
+        Lcg lcg(20260907);
+        int edges = 0, accepted_n = 0;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int64_t t = 0; t < kSamples; ++t) {
+            // 真实信号:0..29999 空闲,30000..69999 占用,70000.. 空闲(真翻转 2 次)
+            const bool high = t >= 30000 && t < 70000;
+            double v = (high ? 1.0 : 0.0) + lcg.uniform(-0.1, 0.1);  // 阈值附近抖动
+            if (!high && t % 2000 < 2) v = 1.05;  // 噪声突刺:2 连拍越阈,不足驻留
+            const auto edge = filter.sample(v, t);
+            if (!edge.has_value()) continue;  // 噪声/驻留中:到不了端点
+            ++edges;
+            auto cand = gw.translate("工位01-占用光电", *edge, t);
+            cand->trust = 3;  // 进程内适配器入口:显式信任级
+            if (sys.pipeline().submit(*cand).status == mse::Receipt::Status::kAccepted)
+                ++accepted_n;
+        }
+        const double ms = std::chrono::duration<double, std::milli>(
+                              std::chrono::steady_clock::now() - t0)
+                              .count();
+        std::printf("  采样 %lld 个 → 迁移沿 %d 个 → 异步受理 %d 条(过滤+提交 %.1f ms)\n",
+                    (long long)kSamples, edges, accepted_n, ms);
+        DEMO_CHECK(edges == 2, "迁移沿数应等于真实翻转次数 2");
+        DEMO_CHECK(accepted_n == edges, "迁移沿应全部被异步受理");
+        // 异步悬态口径:已验未结,drain 前视图看不到
+        std::printf("  悬态 %zu 条在异步队列(已验未结)→ drain_async 串行落账\n",
+                    sys.pipeline().async_pending());
+        const size_t drained = sys.pipeline().drain_async();
+        const size_t plc_events = sys.log().events_of_type("PlcEdgeReported").size();
+        std::printf("  drain 结算 %zu 条;事件日志 PlcEdgeReported = %zu(零污染,有界)\n",
+                    drained, plc_events);
+        DEMO_CHECK(plc_events == 2, "噪声洪峰下结算事件数应有界(==2)");
+        DEMO_CHECK(
+            sys.projection().attrs_of("工位01").value("工位占用", "") == "空闲",
+            "工位01 终态应为空闲");
+    }
+
+    // 信任分级(真实 HTTP 凭证头):无凭证/错凭证被 L2 拒,PLC 网关凭证受理
+    std::printf("-- 信任分级:X-MSE-Token 凭证 → 信任级 → min_trust L2 校验 --\n");
+    {
+        const json plc_payload = {{"type", "PlcEdgeReported"}, {"id", "工位03"},
+                                  {"actor", "plc-gateway"}, {"工位占用", "占用"}};
+        const json r_no = post_event(plc_payload, "← 无凭证:应被 L2 拒");
+        DEMO_CHECK(rejected_at(r_no, 2) && violations_contain(r_no, "信任级不足"),
+                   "无凭证提交 PLC 类型未被 L2 拒");
+        const json r_bad = post_event(plc_payload, "← 错凭证:同样被拒", "forged-token");
+        DEMO_CHECK(rejected_at(r_bad, 2), "错凭证未被拒");
+        const json r_ok = post_event(plc_payload, "← PLC 网关凭证", "plc-gw-01");
+        DEMO_CHECK(accepted(r_ok), "带 PLC 网关凭证未被受理");
+        const size_t drained_http = sys.pipeline().drain_async();
+        std::printf("  drain_async 结算 %zu 条;工位03 工位占用=%s\n", drained_http,
+                    sys.projection().attrs_of("工位03").value("工位占用", "?").c_str());
+        DEMO_CHECK(
+            sys.projection().attrs_of("工位03").value("工位占用", "") == "占用",
+            "工位03 终态应为占用");
+    }
 
     // ========================================================================
     section("4. 质量:检验 → 缺陷锁车 → 误扫拦截 → 返修 → 改判 → 解锁");

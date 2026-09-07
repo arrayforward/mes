@@ -150,7 +150,7 @@ Receipt WritePipeline::submit(const Candidate& c) {
             }
         }
     }
-    Receipt r = submit_inner(c, 0);
+    Receipt r = submit_entry(c);
     if (r.status == Receipt::Status::kRejected) {
         // 被拒候选进拦截记录(零事件零污染,仅留反馈)
         if (rejections_)
@@ -167,8 +167,50 @@ Receipt WritePipeline::submit(const Candidate& c) {
     return r;
 }
 
+// 顶层提交入口:四层校验(同步、即时返回拒绝)→ 按类型 settlement 分流。
+//   sync  :立即结算(现有路径);
+//   async :入队,返回 kAccepted(队列序号)。
+// 悬态口径:异步候选"已验未结"——L0-L3 已通过但尚未进事件日志,drain_async
+// 之前视图看不到它;它悬在 L0(候选)与 L1(事实)之间的队列里。被任一
+// 层拒绝的候选立即返回 rejected,不入队、零污染。
+Receipt WritePipeline::submit_entry(const Candidate& c) {
+    Receipt r = validate_all(c);
+    if (r.status == Receipt::Status::kRejected) return r;
+    const EventTypeEntry* entry = defs_.find_event_type(c.type);
+    if (entry && entry->settlement == "async") {
+        async_queue_.push_back(c);
+        return Receipt::accepted(++async_seq_);
+    }
+    settle(c, 0, r);
+    return r;
+}
+
+// 异步队列 drain:FIFO 逐个 settle(单写者串行,全序保持;max=0 表示全部)。
+// settle 内触发的递归候选仍走 submit_inner 同步语义(不回到本队列)。
+size_t WritePipeline::drain_async(size_t max) {
+    size_t n = 0;
+    while (!async_queue_.empty() && (max == 0 || n < max)) {
+        Candidate c = std::move(async_queue_.front());
+        async_queue_.pop_front();
+        Receipt r;
+        settle(c, 0, r);
+        ++n;
+    }
+    return n;
+}
+
+size_t WritePipeline::async_pending() const { return async_queue_.size(); }
+
 Receipt WritePipeline::submit_inner(const Candidate& c, int depth) {
-    // 四层顺序短路:任何一层不过即返回拒收回执
+    // 触发规则的递归候选:保持同步语义(四层校验 + 立即结算),不进异步队列
+    Receipt r = validate_all(c);
+    if (r.status == Receipt::Status::kRejected) return r;
+    settle(c, depth, r);
+    return r;
+}
+
+// 四层顺序短路:任何一层不过即返回拒收回执
+Receipt WritePipeline::validate_all(const Candidate& c) const {
     Receipt r = validate_layer0(c);
     if (r.status == Receipt::Status::kRejected) return r;
     r = validate_layer1(c);
@@ -177,7 +219,7 @@ Receipt WritePipeline::submit_inner(const Candidate& c, int depth) {
     if (r.status == Receipt::Status::kRejected) return r;
     r = validate_layer3(c);
     if (r.status == Receipt::Status::kRejected) return r;
-    settle(c, depth, r);
+    r.status = Receipt::Status::kSettled;
     return r;
 }
 
@@ -243,13 +285,18 @@ bool datatype_matches(const std::string& datatype, const json& v) {
 
 } // namespace
 
-// ---- [2] 类型 schema:类型已注册?必填键齐?写授权?值域?multi_target? ----
+// ---- [2] 类型 schema:类型已注册?必填键齐?写授权?值域?multi_target?信任级? ----
 Receipt WritePipeline::validate_layer2(const Candidate& c) const {
     const EventTypeEntry* entry = defs_.find_event_type(c.type);
     if (!entry || entry->status != "active")
         return Receipt::rejected(2, {"事件类型未注册: " + c.type});
 
     std::vector<std::string> violations;
+
+    // 信任分级:候选 trust 低于该类型 min_trust 即拒(凭证由 API 网关按入口注入)
+    if (entry->min_trust > c.trust)
+        violations.push_back("信任级不足: " + c.type + " 要求 >=" +
+                             std::to_string(entry->min_trust));
 
     // multi_target 约束
     if (!entry->multi_target && c.writes.size() > 1)

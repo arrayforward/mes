@@ -76,6 +76,14 @@ Receipt Receipt::rejected(int layer, std::vector<std::string> violations) {
     return r;
 }
 
+Receipt Receipt::accepted(int64_t queue_seq) {
+    Receipt r;
+    r.status = Status::kAccepted;
+    r.queue_seq = queue_seq;
+    r.layer = -1;
+    return r;
+}
+
 // ----------------------------------------------------------------------------
 // SpaceRef 序列化
 //   形态:{"kind":"anchor"|"coord"|"raw_text","anchor":..,"coord":..,
@@ -178,21 +186,32 @@ void from_json(const json& j, Event& e) {
 // ----------------------------------------------------------------------------
 
 void to_json(json& j, const Receipt& r) {
+    const char* status = "rejected";
+    switch (r.status) {
+        case Receipt::Status::kSettled:  status = "settled";  break;
+        case Receipt::Status::kAccepted: status = "accepted"; break;
+        case Receipt::Status::kRejected: status = "rejected"; break;
+    }
     j = json{
-        {"status", r.status == Receipt::Status::kSettled ? "settled" : "rejected"},
+        {"status", status},
         {"event_id", r.event_id ? json(*r.event_id) : json()},
+        {"queue_seq", r.queue_seq ? json(*r.queue_seq) : json()},
         {"layer", r.layer},
         {"violations", r.violations},
     };
 }
 
 void from_json(const json& j, Receipt& r) {
-    r.status = get_string(j, "status", "rejected") == "settled"
-                   ? Receipt::Status::kSettled
-                   : Receipt::Status::kRejected;
+    const std::string status = get_string(j, "status", "rejected");
+    r.status = status == "settled"  ? Receipt::Status::kSettled
+               : status == "accepted" ? Receipt::Status::kAccepted
+                                      : Receipt::Status::kRejected;
     r.event_id.reset();
     auto eit = j.find("event_id");
     if (eit != j.end() && eit->is_number()) r.event_id = eit->get<int64_t>();
+    r.queue_seq.reset();
+    auto qit = j.find("queue_seq");
+    if (qit != j.end() && qit->is_number()) r.queue_seq = qit->get<int64_t>();
     r.layer = static_cast<int>(get_int(j, "layer", -1));
     r.violations.clear();
     auto vit = j.find("violations");

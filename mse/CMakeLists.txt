@@ -89,6 +89,7 @@ add_library(mse STATIC
     src/projection.cpp
     src/spacetime.cpp
     src/pipeline.cpp
+    src/plc_filter.cpp
     src/view_engine.cpp
     src/api.cpp
     src/http_server.cpp

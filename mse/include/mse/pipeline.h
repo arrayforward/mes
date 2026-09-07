@@ -61,9 +61,16 @@ public:
     WritePipeline(DefinitionLayer& defs, EventLog& log, Projection& proj,
                   SpacetimeTree& spacetime, RuleEngine& rules);
 
-    /// 提交变化描述:四层校验 → 预演 → 结算。同步返回回执。
+    /// 提交变化描述:四层校验 → 预演 → 结算。同步类型立即结算返回回执;
+    /// 异步类型(settlement=="async")四层校验通过后入队,返回 kAccepted
+    /// (含队列序号),由 drain_async 统一串行结算(单写者,全序保持)。
     /// 被拒候选进入 RejectionLog(若已挂接),不进事件树。
     Receipt submit(const Candidate& c);
+
+    /// 结算异步队列中的候选(单写者串行)。max=0 表示全部。返回结算条数。
+    size_t drain_async(size_t max = 0);
+    /// 异步队列中待结算的候选数。
+    size_t async_pending() const;
 
     void set_rejection_log(RejectionLog* log);   // 挂接拦截记录(拦截模式视图用)
     void set_trigger_depth_limit(int d);         // 触发规则递归深度上限(默认 4)
@@ -104,11 +111,18 @@ private:
 
     std::map<std::string, Receipt> idempotency_;  // 幂等键 → 原回执
 
+    // 异步结算边界:settlement=="async" 的类型四层校验通过后在此排队,
+    // 由 drain_async 单写者 FIFO 串行结算(全序保持)。
+    std::deque<Candidate> async_queue_;  // 已验未结的悬态候选(见 submit 注释)
+    int64_t               async_seq_ = 0;  // 异步队列序号(回执 queue_seq)
+
     SnapshotStore*          snapshots_ = nullptr;         // 定距快照库(可空 = 关)
     int64_t                 snapshot_interval_ = 0;       // 快照间隔(0 = 关)
     storage::RecordBackend* idem_backend_ = nullptr;      // 幂等键持久化(可空 = 仅内存)
 
     Receipt submit_inner(const Candidate& c, int depth);
+    Receipt submit_entry(const Candidate& c);             // 顶层入口:校验后按 settlement 分流
+    Receipt validate_all(const Candidate& c) const;       // L0-L3 顺序短路
     Receipt validate_layer0(const Candidate& c) const;  // 字典登记
     Receipt validate_layer1(const Candidate& c) const;  // 可聚合性
     Receipt validate_layer2(const Candidate& c) const;  // 类型 schema + 写授权 + 值域

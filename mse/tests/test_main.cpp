@@ -1257,6 +1257,344 @@ static void test_wasm_rule_wired_double_gate() {
 }
 
 // ============================================================================
+// 25. PLC 三层过滤单元:迟滞 / 驻留 / 聚合去重 / 网关映射
+// ============================================================================
+#include "mse/plc_filter.h"
+
+static void test_plc_filter_units() {
+    banner("25. PLC 三层过滤单元");
+    using mse::PlcFilter;
+
+    {   // 迟滞:中间带抖动不动(committed 低态,带内值永不产生输出)
+        PlcFilter f("sig-h", PlcFilter::Config{1.0, 0.0, 3, 0});
+        for (int t = 0; t < 50; ++t)
+            CHECK(!f.sample(0.2 + 0.05 * (t % 7), t).has_value());  // 0.2..0.5 带内
+        CHECK(!f.state());
+    }
+    {   // 驻留:新态须连续稳定 dwell_ticks 拍;不满不采信,回落清零重计
+        PlcFilter f("sig-d", PlcFilter::Config{1.0, 0.0, 3, 0});
+        CHECK(!f.sample(1.2, 0).has_value());   // 驻留 1/3
+        CHECK(!f.sample(1.1, 1).has_value());   // 驻留 2/3
+        CHECK(!f.sample(-0.2, 2).has_value());  // 值回落:清零重计
+        CHECK(!f.sample(1.2, 3).has_value());   // 重新驻留 1/3
+        CHECK(!f.sample(1.2, 4).has_value());   // 2/3
+        const auto e = f.sample(1.2, 5);        // 3/3:采信翻转
+        CHECK(e.has_value() && *e == true);
+        CHECK(f.state());
+        // 回到低态同样要驻留 3 拍
+        CHECK(!f.sample(-0.1, 6).has_value());
+        CHECK(!f.sample(-0.1, 7).has_value());
+        const auto e2 = f.sample(-0.1, 8);
+        CHECK(e2.has_value() && *e2 == false);
+        CHECK(!f.state());
+    }
+    {   // 聚合去重:窗口内的迁移沿被吞,窗口外放行
+        PlcFilter f("sig-w", PlcFilter::Config{1.0, 0.0, 1, 10});
+        const auto e1 = f.sample(1.2, 0);    // 第一个沿:输出
+        CHECK(e1.has_value() && *e1 == true);
+        CHECK(!f.sample(-0.1, 2).has_value());  // 距上次输出 2 < 10:吞掉(状态仍翻转)
+        CHECK(!f.state());
+        const auto e3 = f.sample(1.2, 15);   // 距上次输出 15 >= 10:放行
+        CHECK(e3.has_value() && *e3 == true);
+    }
+    {   // 网关映射:未映射信号 nullopt;已映射 → 候选(边决定写入值,tick 文本)
+        mse::AdapterGateway gw;
+        CHECK(!gw.translate("unmapped", true, 1).has_value());
+        mse::AdapterGateway::EdgeMapping m;
+        m.type = "PlcEdgeReported";
+        m.target_id = "工位01";
+        m.key = "工位占用";
+        m.high_value = "占用";
+        m.low_value = "空闲";
+        m.anchor = "整车厂/总装车间/总装线/工位01";
+        gw.map_edge("sig-occupy", m);
+        const auto hi = gw.translate("sig-occupy", true, 42);
+        CHECK(hi.has_value());
+        CHECK_EQ(hi->type, "PlcEdgeReported");
+        CHECK_EQ(hi->writes.at("工位01").at("工位占用"), json("占用"));
+        CHECK_EQ(hi->actor, "plc-gateway");
+        CHECK_EQ(hi->occur_time, "tick:42");
+        CHECK_EQ(hi->space.anchor, "整车厂/总装车间/总装线/工位01");
+        const auto lo = gw.translate("sig-occupy", false, 43);
+        CHECK(lo.has_value());
+        CHECK_EQ(lo->writes.at("工位01").at("工位占用"), json("空闲"));
+    }
+}
+
+// ============================================================================
+// 26. PLC 噪声洪峰:100000 个含噪采样经三层过滤,结算事件数有界
+// ============================================================================
+// 确定性伪随机(LCG;核心链路不读物理时钟/随机数,测试同样守此纪律)
+struct Lcg {
+    uint64_t s;
+    explicit Lcg(uint64_t seed) : s(seed) {}
+    uint32_t next() {
+        s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<uint32_t>(s >> 33);  // 取高 31 位
+    }
+    double uniform(double lo, double hi) {
+        return lo + (hi - lo) * (static_cast<double>(next()) / 2147483647.0);
+    }
+};
+
+static void test_plc_noise_flood() {
+    banner("26. PLC 噪声洪峰(100000 采样 → 2 事件)");
+    Fixture f;
+
+    mse::PlcFilter filter("工位01-占用光电", mse::PlcFilter::Config{1.0, 0.0, 3, 0});
+    mse::AdapterGateway gw;
+    mse::AdapterGateway::EdgeMapping m;
+    m.type = "PlcEdgeReported";
+    m.target_id = "工位01";
+    m.key = "工位占用";
+    m.high_value = "占用";
+    m.low_value = "空闲";
+    m.anchor = "整车厂/总装车间/总装线/工位01";
+    gw.map_edge("工位01-占用光电", m);
+
+    constexpr int64_t kSamples = 100000;
+    Lcg lcg(20260907);
+    int edges = 0;
+    const int64_t log_before = f.sys.log().size();
+    for (int64_t t = 0; t < kSamples; ++t) {
+        // 真实信号:0..29999 低态,30000..69999 高态,70000.. 低态(真翻转 2 次)
+        const bool high = t >= 30000 && t < 70000;
+        // 噪声:在 off-0.1 与 on+0.1 附近抖动(-0.1..0.1 / 0.9..1.1)
+        double v = (high ? 1.0 : 0.0) + lcg.uniform(-0.1, 0.1);
+        // 噪声突刺:低态期偶发 2 连拍越上阈(不足驻留 3 拍,不得翻转)
+        if (!high && t % 2000 < 2) v = 1.05;
+        const auto edge = filter.sample(v, t);
+        if (!edge.has_value()) continue;  // 噪声/驻留中/去重:不到端点
+        ++edges;
+        auto cand = gw.translate("工位01-占用光电", *edge, t);
+        CHECK(cand.has_value());
+        cand->trust = 3;  // 进程内适配器入口:显式信任级(PLC 网关凭证等价)
+        const mse::Receipt r = f.sys.pipeline().submit(*cand);
+        CHECK(r.status == mse::Receipt::Status::kAccepted);  // async:已验未结
+    }
+    // 过滤器输出沿数 << 采样数:恰好等于真实翻转次数
+    CHECK_EQ(edges, 2);
+    CHECK(edges < kSamples / 1000);
+    // 悬态口径:drain 之前事件日志看不到它们
+    CHECK_EQ(f.sys.pipeline().async_pending(), 2u);
+    CHECK_EQ(f.sys.log().size(), log_before);
+    // drain:单写者串行落账,事件数 == 真实翻转次数,日志零污染
+    CHECK_EQ(f.sys.pipeline().drain_async(), 2u);
+    CHECK_EQ(f.sys.log().size(), log_before + 2);
+    CHECK_EQ(f.sys.log().events_of_type("PlcEdgeReported").size(), 2u);
+    // 终态正确:最后一次沿是回到低态(空闲)
+    CHECK_EQ(f.sys.projection().attrs_of("工位01").at("工位占用"), json("空闲"));
+}
+
+// ============================================================================
+// 27. 异步结算边界:accepted + queue_seq、悬态、drain 全序、被拒不入队
+// ============================================================================
+static void test_async_settlement() {
+    banner("27. 异步结算边界");
+    Fixture f;
+
+    // 注册测试属性(writers 授权给新类型;优先级等既有键未授权,会被 L2 拦)
+    const mse::Receipt ra = f.sys.defs().settle_definition(
+        "AttributeRegistered",
+        {{"key", "异步优先级"}, {"semantic", "异步结算测试用优先级"},
+         {"datatype", "integer"}, {"unit", ""},
+         {"range", json::array()},{"writers", {"AsyncSeqAdjusted"}},
+         {"kind", "原生"},       {"rule_ref", ""}});
+    CHECK(settled(ra));
+
+    // 注册一个带 L3 规则的 async 类型(借用 R-PLAN-ADJUST:仅 01/02 可结算)
+    const mse::Receipt rt = f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "AsyncSeqAdjusted"},
+         {"required_keys", {"id", "actor"}},
+         {"optional_keys", {"异步优先级"}},
+         {"rules", {"R-PLAN-ADJUST"}},
+         {"correction", ""},
+         {"multi_target", false},
+         {"settlement", "async"}});
+    CHECK(settled(rt));
+
+    auto async_candidate = [](const std::string& id, int prio) {
+        mse::Candidate c;
+        c.type = "AsyncSeqAdjusted";
+        c.actor = "planner";
+        c.writes[id] = {{"异步优先级", prio}};
+        return c;
+    };
+
+    // L3 拒:计划状态 05 的车不可调序——被拒的异步候选立即 rejected,不入队
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-AS5", {{"车型", "SUV-A"}})));
+    drive_plan_to(f.sys, "VIN-AS5", 5);
+    const mse::Receipt rej = f.sys.pipeline().submit(async_candidate("VIN-AS5", 9));
+    CHECK(rejected_at(rej, 3));
+    CHECK_EQ(f.sys.pipeline().async_pending(), 0u);
+
+    // 合法候选:accepted + queue_seq 单调;日志未增长(悬态:已验未结)
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-AS1", {{"车型", "SUV-A"}})));
+    drive_plan_to(f.sys, "VIN-AS1", 1);
+    const int64_t log_before = f.sys.log().size();
+    const mse::Receipt a1 = f.sys.pipeline().submit(async_candidate("VIN-AS1", 1));
+    CHECK(a1.status == mse::Receipt::Status::kAccepted);
+    CHECK(a1.queue_seq.has_value());
+    const mse::Receipt a2 = f.sys.pipeline().submit(async_candidate("VIN-AS1", 2));
+    CHECK(a2.status == mse::Receipt::Status::kAccepted);
+    CHECK_EQ(*a2.queue_seq, *a1.queue_seq + 1);  // 队列序号单调
+    CHECK_EQ(f.sys.log().size(), log_before);    // 未落日志
+    CHECK_EQ(f.sys.pipeline().async_pending(), 2u);
+
+    // 异步回执也幂等:重复提交返回原回执,队列不再增长
+    mse::Candidate idem = async_candidate("VIN-AS1", 3);
+    idem.idempotency_key = "async-idem-1";
+    const mse::Receipt i1 = f.sys.pipeline().submit(idem);
+    const mse::Receipt i2 = f.sys.pipeline().submit(idem);
+    CHECK(i1.status == mse::Receipt::Status::kAccepted);
+    CHECK(i2.status == mse::Receipt::Status::kAccepted);
+    CHECK_EQ(*i2.queue_seq, *i1.queue_seq);
+    CHECK_EQ(f.sys.pipeline().async_pending(), 3u);
+
+    // FIFO + 全序:先 drain 1 条,再插一条同步事件,再 drain 余下——
+    // 异步事件的事件 id 严格按 drain 次序分配(单写者全序保持)
+    CHECK_EQ(f.sys.pipeline().drain_async(1), 1u);
+    CHECK_EQ(f.sys.pipeline().async_pending(), 2u);
+    const auto drained1 = f.sys.log().events_of_type("AsyncSeqAdjusted");
+    CHECK_EQ(drained1.size(), 1u);
+    CHECK_EQ(drained1[0].writes.at("VIN-AS1").at("异步优先级"), json(1));  // FIFO:先 1
+    const mse::Receipt sync_r =
+        post(f.sys, "OrderReceived", "VIN-AS2", {{"车型", "Sedan-B"}});
+    CHECK(settled(sync_r));
+    CHECK_EQ(f.sys.pipeline().drain_async(), 2u);
+    const auto drained = f.sys.log().events_of_type("AsyncSeqAdjusted");
+    CHECK_EQ(drained.size(), 3u);
+    CHECK(drained[1].event_id > *sync_r.event_id);  // drain 晚于同步事件:序号在后
+    CHECK(drained[2].event_id > drained[1].event_id);
+    // 视图可见(投影终态 = 最后一次写入)
+    CHECK_EQ(f.sys.projection().attrs_of("VIN-AS1").at("异步优先级"), json(3));
+}
+
+// ============================================================================
+// 28. 信任分级:min_trust L2 校验、HTTP X-MSE-Token、accepted 序列化往返
+// ============================================================================
+static void test_trust_tiers() {
+    banner("28. 信任分级");
+    Fixture f;
+
+    auto plc_candidate = [](const std::string& id) {
+        mse::Candidate c;
+        c.type = "PlcEdgeReported";
+        c.actor = "plc-gateway";
+        c.writes[id] = {{"工位占用", "占用"}};
+        return c;
+    };
+
+    // 无凭证(trust=0)提交 min_trust=1 类型:L2 拒,理由含"信任级不足"
+    mse::Candidate c0 = plc_candidate("工位01");
+    const mse::Receipt r0 = f.sys.pipeline().submit(c0);
+    CHECK(rejected_at(r0, 2));
+    bool trust_msg = false;
+    for (const auto& v : r0.violations)
+        if (v.find("信任级不足") != std::string::npos) trust_msg = true;
+    CHECK(trust_msg);
+
+    // 进程内 SDK 调用显式 trust=3(最高):通过,async → accepted
+    mse::Candidate c3 = plc_candidate("工位01");
+    c3.trust = 3;
+    CHECK(f.sys.pipeline().submit(c3).status == mse::Receipt::Status::kAccepted);
+    f.sys.pipeline().drain_async();
+
+    // min_trust 定义校验:负数被拒
+    const mse::Receipt bad_def = f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "BadTrust"}, {"required_keys", {"id", "actor"}},
+         {"optional_keys", json::array()}, {"rules", json::array()},
+         {"correction", ""}, {"multi_target", false}, {"min_trust", -1}});
+    CHECK(!settled(bad_def));
+
+    // API 门面:post_events(payload, trust) 注入信任级;accepted 回执形态
+    const json aj = f.sys.api().post_events(
+        {{"type", "PlcEdgeReported"}, {"id", "工位02"}, {"actor", "plc-gateway"},
+         {"工位占用", "占用"}},
+        1);
+    CHECK_EQ(aj["status"], "accepted");
+    CHECK(aj["queue_seq"].is_number());
+    const json aj0 = f.sys.api().post_events(
+        {{"type", "PlcEdgeReported"}, {"id", "工位02"}, {"actor", "plc-gateway"},
+         {"工位占用", "空闲"}},
+        0);
+    CHECK_EQ(aj0["status"], "rejected");
+    CHECK_EQ(aj0["layer"], 2);
+    f.sys.pipeline().drain_async();
+
+    // Receipt accepted 序列化往返
+    {
+        const json j = json(mse::Receipt::accepted(7));
+        CHECK_EQ(j["status"], "accepted");
+        CHECK_EQ(j["queue_seq"], 7);
+        const mse::Receipt back = j.get<mse::Receipt>();
+        CHECK(back.status == mse::Receipt::Status::kAccepted);
+        CHECK(back.queue_seq.has_value() && *back.queue_seq == 7);
+        // 既有形态不回归
+        CHECK(json(mse::Receipt::settled(5)).get<mse::Receipt>().status ==
+              mse::Receipt::Status::kSettled);
+        CHECK(json(mse::Receipt::rejected(3, {"x"})).get<mse::Receipt>().status ==
+              mse::Receipt::Status::kRejected);
+    }
+
+    // 真实 HTTP:X-MSE-Token 头 → trust_of → post_events(body, trust)
+    f.sys.api().set_trust_tokens({{"plc-secret", 1}, {"admin-secret", 3}});
+    mse::HttpServer srv;
+    const bool ok = srv.listen_on("127.0.0.1", 0, [&f](const mse::HttpRequest& req) {
+        if (req.method == "POST" && req.path == "/events") {
+            const json payload = json::parse(req.body, nullptr, false);
+            if (payload.is_discarded())
+                return mse::HttpResponse{400, "application/json; charset=utf-8",
+                                         "{\"error\":\"bad json\"}"};
+            // 凭证头 → 信任级(未携带/未登记 → 0)
+            int trust = 0;
+            if (auto it = req.headers.find("x-mse-token"); it != req.headers.end())
+                trust = f.sys.api().trust_of(it->second);
+            return mse::HttpResponse{200, "application/json; charset=utf-8",
+                                     f.sys.api().post_events(payload, trust).dump()};
+        }
+        return mse::HttpResponse{404, "application/json; charset=utf-8",
+                                 "{\"error\":\"not found\"}"};
+    });
+    CHECK(ok);
+    const uint16_t port = srv.port();
+    const json plc_payload = {{"type", "PlcEdgeReported"}, {"id", "工位03"},
+                              {"actor", "plc-gateway"}, {"工位占用", "占用"}};
+    // 无凭证:L2 拒
+    {
+        const auto [s, b] =
+            mse::http_request("127.0.0.1", port, "POST", "/events", plc_payload.dump());
+        CHECK_EQ(s, 200);
+        const json r = json::parse(b);
+        CHECK_EQ(r["status"], "rejected");
+        CHECK_EQ(r["layer"], 2);
+    }
+    // 错凭证:同样被拒(未登记 → trust=0)
+    {
+        const auto [s, b] = mse::http_request("127.0.0.1", port, "POST", "/events",
+                                              plc_payload.dump(),
+                                              {{"X-MSE-Token", "wrong-token"}});
+        CHECK_EQ(s, 200);
+        CHECK_EQ(json::parse(b)["status"], "rejected");
+    }
+    // 带对凭证(PLC 网关级):accepted
+    {
+        const auto [s, b] = mse::http_request("127.0.0.1", port, "POST", "/events",
+                                              plc_payload.dump(),
+                                              {{"X-MSE-Token", "plc-secret"}});
+        CHECK_EQ(s, 200);
+        const json r = json::parse(b);
+        CHECK_EQ(r["status"], "accepted");
+        CHECK(r["queue_seq"].is_number());
+    }
+    f.sys.pipeline().drain_async();
+    CHECK_EQ(f.sys.projection().attrs_of("工位03").at("工位占用"), json("占用"));
+    srv.stop();
+}
+
+// ============================================================================
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // 崩溃时也能看到已完成的段落
     std::puts("mse 红线测试(memory 后端)");
@@ -1283,6 +1621,10 @@ int main() {
     test_frozen_sequence_lock();
     test_efficiency_derive();
     test_wasm_rule_wired_double_gate();
+    test_plc_filter_units();
+    test_plc_noise_flood();
+    test_async_settlement();
+    test_trust_tiers();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

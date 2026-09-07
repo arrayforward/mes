@@ -21,6 +21,7 @@ struct HttpRequest {
     std::string method;                         // "GET" | "POST" | ...
     std::string path;                           // 不含查询串,如 "/views/V-REWORK-001"
     std::map<std::string, std::string> query;   // URL 解码后的查询参数
+    std::map<std::string, std::string> headers; // 请求头(键统一小写)
     std::string body;
 };
 
@@ -50,9 +51,11 @@ private:
 };
 
 /// 极简同步 HTTP 客户端(demo/测试用):返回 (status, body);网络错误返回 (-1, 错误信息)。
+/// headers:附加请求头(如 {"x-mse-token", "..."};键按原样发送)。
 std::pair<int, std::string> http_request(const std::string& host, uint16_t port,
                                          const std::string& method, const std::string& path,
-                                         const std::string& body = "");
+                                         const std::string& body = "",
+                                         const std::map<std::string, std::string>& headers = {});
 
 /// URL 查询串解析(百分号解码)。
 std::map<std::string, std::string> parse_query(const std::string& query_string);

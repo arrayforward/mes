@@ -25,6 +25,8 @@ const std::set<std::string>& system_keys() {
 json receipt_json(const Receipt& r) {
     if (r.status == Receipt::Status::kSettled)
         return json{{"status", "settled"}, {"event_id", r.event_id.value_or(0)}};
+    if (r.status == Receipt::Status::kAccepted)
+        return json{{"status", "accepted"}, {"queue_seq", r.queue_seq.value_or(0)}};
     return json{{"status", "rejected"}, {"layer", r.layer}, {"violations", r.violations}};
 }
 
@@ -152,14 +154,24 @@ std::optional<Candidate> ApiGateway::normalize(const json& payload, std::string&
     return c;
 }
 
-json ApiGateway::post_events(const json& payload) {
+json ApiGateway::post_events(const json& payload, int trust) {
     std::string error;
     std::optional<Candidate> c = normalize(payload, error);
     if (!c) {
         // 载荷形状非法:第 -1 层(未进管线)
         return json{{"status", "rejected"}, {"layer", -1}, {"violations", {error}}};
     }
+    c->trust = trust;  // 入口信任级注入(凭证元数据,不进事件)
     return receipt_json(pipeline_.submit(*c));
+}
+
+void ApiGateway::set_trust_tokens(std::map<std::string, int> tokens) {
+    trust_tokens_ = std::move(tokens);
+}
+
+int ApiGateway::trust_of(const std::string& token) const {
+    const auto it = trust_tokens_.find(token);
+    return it != trust_tokens_.end() ? it->second : 0;
 }
 
 json ApiGateway::get_view(const std::string& view_id,

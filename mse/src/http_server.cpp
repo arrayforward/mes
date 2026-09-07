@@ -157,17 +157,20 @@ void handle_connection(socket_t conn, const HttpServer::Handler& handler) {
         req.query = parse_query(target.substr(q + 1));
     }
 
-    // 头部:只关心 Content-Length
+    // 头部:全部解析进 headers(键统一小写);Content-Length 单独取出
     size_t content_length = 0;
     size_t pos = line_end + 2;
     while (pos < header_end) {
         const size_t eol = raw.find("\r\n", pos);
         const std::string line = raw.substr(pos, eol - pos);
         const size_t colon = line.find(':');
-        if (colon != std::string::npos &&
-            to_lower(trim(line.substr(0, colon))) == "content-length") {
-            content_length = static_cast<size_t>(
-                std::strtoull(trim(line.substr(colon + 1)).c_str(), nullptr, 10));
+        if (colon != std::string::npos) {
+            const std::string name = to_lower(trim(line.substr(0, colon)));
+            const std::string value = trim(line.substr(colon + 1));
+            req.headers[name] = value;
+            if (name == "content-length")
+                content_length = static_cast<size_t>(
+                    std::strtoull(value.c_str(), nullptr, 10));
         }
         pos = eol + 2;
     }
@@ -333,7 +336,8 @@ std::map<std::string, std::string> parse_query(const std::string& query_string) 
 
 std::pair<int, std::string> http_request(const std::string& host, uint16_t port,
                                          const std::string& method, const std::string& path,
-                                         const std::string& body) {
+                                         const std::string& body,
+                                         const std::map<std::string, std::string>& headers) {
     if (!socket_env_acquire()) return {-1, "socket 环境初始化失败"};
     struct EnvGuard {
         ~EnvGuard() { socket_env_release(); }
@@ -356,6 +360,7 @@ std::pair<int, std::string> http_request(const std::string& host, uint16_t port,
     }
 
     std::string req = method + " " + path + " HTTP/1.1\r\nHost: " + host + "\r\n";
+    for (const auto& [name, value] : headers) req += name + ": " + value + "\r\n";
     if (!body.empty()) req += "Content-Type: application/json; charset=utf-8\r\n";
     req += "Content-Length: " + std::to_string(body.size()) +
            "\r\nConnection: close\r\n\r\n" + body;

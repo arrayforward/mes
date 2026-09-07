@@ -955,6 +955,27 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"emits", {"InboundMessageRecorded", "InboundMessageVoided"}},
         {"render_mode", "流水"}});
 
+    // ============ P4 适配层:PLC 迁移沿(信任分级 + 异步结算的展示实例) ============
+    // 高频机器信号不是事件类型:原始流经适配层三层过滤(见 plc_filter.h),
+    // 迁移沿经聚合网关翻译成 PlcEdgeReported 候选。min_trust=1:仅 PLC 网关级
+    // 凭证可提交(无凭证的 HTTP 提交在 L2 被拦);settlement=async:四层校验
+    // 后入队,drain_async 统一串行结算。修正配平:PlcEdgeVoided 先注册。
+    reg_attr(defs, attr_payload("工位占用",
+        "工位占用状态(PLC 光电信号经适配层三层过滤后的可信迁移沿)",
+        "enum", "", {"空闲", "占用"}, {"PlcEdgeReported", "PlcEdgeVoided"}));
+    {
+        json p = type_payload("PlcEdgeVoided", {"id", "actor"}, {"工位占用"}, {}, "", false);
+        p["min_trust"] = 1;  // PLC 网关级
+        reg_type(defs, p);
+    }
+    {
+        json p = type_payload("PlcEdgeReported", {"id", "actor", "工位占用"}, {}, {},
+                              "PlcEdgeVoided", false);
+        p["settlement"] = "async";  // 高频入口:已验未结悬在队列,drain 时串行落账
+        p["min_trust"]  = 1;        // PLC 网关级
+        reg_type(defs, p);
+    }
+
     // ---- 回执总账:种子是可信定义,rejected 即 bug ----
     std::printf("[seeds] 种子定义结算:%d/%d 成功\n", g_tally.ok, g_tally.total);
 }

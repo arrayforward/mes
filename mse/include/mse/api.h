@@ -34,10 +34,17 @@ public:
     ApiGateway(WritePipeline& pipeline, ViewEngine& views, DefinitionLayer& defs);
 
     /// 写动词:POST /events。入参扁平 k-v(json object),返回回执 JSON:
-    /// {"status":"settled","event_id":n} 或
+    /// {"status":"settled","event_id":n} 或 {"status":"accepted","queue_seq":n} 或
     /// {"status":"rejected","layer":k,"violations":[...]}。
     /// 载荷形状非法(非 object/缺 type/id) → {"status":"rejected","layer":-1,...}。
-    json post_events(const json& payload);
+    /// trust:入口信任级(HTTP 适配器从凭证头映射注入;进程内 SDK 调用显式传入)。
+    json post_events(const json& payload, int trust = 0);
+
+    /// 信任分级:登记 凭证→信任级(如 {"plc-gw-token":1, "ui-token":2})。
+    /// HTTP 适配器用请求头凭证查表;未携带/未登记 → trust=0。
+    void set_trust_tokens(std::map<std::string, int> tokens);
+    /// 凭证 → 信任级(未登记 → 0)。
+    int trust_of(const std::string& token) const;
 
     /// 读动词:GET /views/{viewId}?observer=&entity=&t=(t = AS OF 事件序号)。
     json get_view(const std::string& view_id,
@@ -55,6 +62,7 @@ private:
     WritePipeline&   pipeline_;
     ViewEngine&      views_;
     DefinitionLayer& defs_;
+    std::map<std::string, int> trust_tokens_;  // 凭证 → 信任级(未登记 → 0)
 };
 
 } // namespace mse

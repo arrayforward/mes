@@ -56,6 +56,8 @@ struct ChangeSet {
     std::optional<json>     evidence;    // 依据(扫描原始值/图片哈希/外部单号)
     std::optional<int64_t>  corrects;    // 因果引用:被修正的原事件 id(普通键)
     std::optional<std::string> idempotency_key;  // 候选层幂等键(来源方生成)
+    int         trust = 0;               // 信任级(凭证元数据,由 API 网关按入口凭证注入;
+                                         // 不序列化进事件——它不是事实的一部分)
 };
 
 using Candidate = ChangeSet;  // 候选 = 未结算的变化描述(L0)
@@ -77,15 +79,18 @@ struct Event : ChangeSet {
 // 被拒的候选零事件、零补偿、零污染(不进事件树)。
 // ----------------------------------------------------------------------------
 struct Receipt {
-    enum class Status { kSettled, kRejected };
+    enum class Status { kSettled, kRejected, kAccepted };
 
     Status status = Status::kRejected;
     std::optional<int64_t> event_id;      // kSettled 时有值
+    std::optional<int64_t> queue_seq;     // kAccepted 时有值(异步队列序号)
     int                     layer = -1;   // kRejected:拦截发生在第几层(0..3)
     std::vector<std::string> violations;  // 拒绝原因/违反的规则清单
 
     static Receipt settled(int64_t event_id);
     static Receipt rejected(int layer, std::vector<std::string> violations);
+    /// kAccepted:异步结算类型已入队(队列序号;结算结果由队列 drain 后落日志)。
+    static Receipt accepted(int64_t queue_seq);
 };
 
 // ---- JSON 序列化(事件落盘/落日志用;字段序固定以保证序列化确定性) ----

@@ -41,10 +41,10 @@
 ```
 mse/
 ├── include/mse/         全部公开头文件(契约先行)
-├── src/                 16 个实现文件(见下表)
+├── src/                 17 个实现文件(见下表)
 ├── assets/              knowledge 协助用种子(制造域本体 + 词典)+ wasm/ 预烘焙规则产物
 ├── demo/sim_auto_flow.cpp   整车厂总装车间的一天:端到端综合流程(交付演示)
-├── tests/test_main.cpp      红线测试(极简自带框架,323 项断言)
+├── tests/test_main.cpp      红线测试(极简自带框架,466 项断言)
 └── CMakeLists.txt       引入兄弟模块(knowledge/geocore/entity/voxel→storage)+ wasm3
 ```
 
@@ -58,14 +58,15 @@ mse/
 | `src/rules.cpp` | 规则集 + 无环境沙盒求值器(JSON-logic 方言)、静态检查 | 实现方案 §3.3 |
 | `src/wasm_sandbox.cpp` | WASM 规则沙盒(wasm3)+ 烘焙管线:静态闸、试跑、版本钉死 | 实现方案 §3.3 |
 | `src/projection.cpp` | 投影引擎:fold → 本体聚合属性集(属性多属)、确定性哈希、定距快照存取 | 实现方案 §2.2/§3.4 |
-| `src/pipeline.cpp` | 写侧管线:四层校验 + 决策环(单写者)、幂等(持久化)、触发/推导(on_types 变化驱动)、拦截记录 | API 文档 §三、实现方案 §3.2 |
+| `src/pipeline.cpp` | 写侧管线:四层校验 + 决策环(单写者)、幂等(持久化)、异步结算边界(drain_async)、触发/推导(on_types 变化驱动)、拦截记录 | API 文档 §三、实现方案 §3.2 |
+| `src/plc_filter.cpp` | 适配层:PLC/传感器三层过滤(迟滞+驻留+聚合去重)与映射表网关,迁移沿 → 候选 | API 文档 §七、实现方案 §3.9 |
 | `src/view_engine.cpp` | 读侧视图引擎:四元组求值,终态/流水/拦截/遍历四模式,AS OF t(快照加速),按钮可用性,读侧行过滤 | API 文档 §八 |
 | `src/api.cpp` | API 门面:两个动词(进程内),扁平载荷 → Candidate 归一化 | API 文档 §一 |
 | `src/http_server.cpp` | 极简 HTTP/1.1 服务器与客户端(原生 socket,零第三方依赖) | 实现方案 §3.8 |
 | `src/spacetime.cpp` | 时空树:锚点精度匹配、时空存证(stmb 块 + 版本链)、轨迹、AS OF t | API 文档 §五、实现方案 §3.6 |
 | `src/knowledge_assist.cpp` | knowledge 协助:自由文本属性提取、规则协助推理(只产建议) | API 文档 §七 |
 | `src/entity_bridge.cpp` | entity 演化桥:观测流 → 浮现实体 → EntityObserved 候选 | 用户约定(非人力实体创建) |
-| `src/seeds.cpp` | 种子定义:系统键 + 整车厂业务全覆盖(46 视图的机制实例化,213 条定义全结算) | 视图提取文档(46 视图) |
+| `src/seeds.cpp` | 种子定义:系统键 + 整车厂业务全覆盖(46 视图的机制实例化,216 条定义全结算;含 PLC 迁移沿类型) | 视图提取文档(46 视图) |
 | `src/seeds_wasm.cpp` | WASM 种子规则:读 assets/wasm 预烘焙产物,经同一条 settle_definition 注册 | 实现方案 §3.3 |
 | `src/system.cpp` | 系统装配:构造即完成定义加载、日志重放、投影(快照加速)与时空重建 | 实现方案 §一 |
 
@@ -78,12 +79,14 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
 ./mse/build/mse_demo        # 汽车生产短流程端到端模拟(生成 mse_demo.db)
 ```
 
-- `mse_tests`:23 组红线测试(memory 后端,323 项断言)——重放逐比特一致、
+- `mse_tests`:27 组红线测试(memory 后端,466 项断言)——重放逐比特一致、
   四层校验各自拦截、修正链、读写一致性、定义热更新、时空、规则 DSL、
   HTTP 端到端、knowledge 协助、entity 演化桥、WASM 沙盒(烘焙/静态闸/全链路)、
   定距快照与崩溃恢复、AS OF 快照加速一致、幂等键持久化、on_types 变化驱动、
   遍历视图,以及业务覆盖组:B5 遍历、B4 拦截、F15 逐级报警、B7-B10 规则决定行、
-  冻结禁调序、达成率 derive(除零保护)、WASM 接入后 05 双拦截。
+  冻结禁调序、达成率 derive(除零保护)、WASM 接入后 05 双拦截,
+  与 P4 组:PLC 三层过滤单元、噪声洪峰(10 万采样 → 2 事件)、异步结算边界、
+  信任分级(min_trust L2 + HTTP X-MSE-Token + accepted 回执序列化)。
 - `mse_demo_smoke`:demo 全量跑一遍(约 4s,自带红线断言,退出码非零即失败)。
 - mse 库与两个 exe 均 `-Wall -Wextra` 零警告;MinGW 下运行库静态链接,exe 可独立运行。
 
@@ -109,8 +112,12 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
 
 ```json
 {"status":"settled","event_id":21}
+{"status":"accepted","queue_seq":3}
 {"status":"rejected","layer":3,"violations":["R-QUAL-LOCK:锁定车辆不得下线"]}
 ```
+
+`accepted` 为异步结算类型(`settlement="async"`)的受理回执:四层校验已通过、
+候选在队列中悬而未结,`drain_async` 后才进事件日志。
 
 `GET /views/V-PLAN-A3?observer=计划员`(节选):行 = 本体终态,按钮可用性与写侧 L3 同一份规则——
 "界面上能点的 ⇔ 系统能结算的";`?t=<event_id>` 对所有视图做 AS OF 时间回溯。
@@ -125,7 +132,7 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
 ## demo 场景(sim_auto_flow):整车厂总装车间的一天
 
 sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 定距快照(间隔 20),
-99 条事件全程真实 HTTP 驱动,八幕:
+102 条事件全程真实 HTTP 驱动(PLC 适配层小节走进程内适配器入口),九节:
 
 1. **开班**:ERP 订单经 `InboundMessageRecorded` 进系统 → `OrderReceived`×3 +
    产线计划基线 → A2 排序定序列号、`OrderSwapped` 换单 → `OrderFrozen` 冻结一单 →
@@ -138,6 +145,10 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
 3. **生产**:AVI 两车过工位 01-03(VIN2 离区再入)→ ANDON 呼叫→停线→复线 →
    PMC 同检点连发 10 次故障:**同检点故障计数 derive 递增(null→0 起步),
    第 3 次触发科长预警、第 10 次触发部长预警**(trigger 产物仍走四层校验);
+   **PLC 噪声洪峰**:工位01 占用光电 100000 个含噪采样(LCG 确定性)经适配层
+   三层过滤 → 迁移沿 2 个 → 异步受理 2 条 → drain 落账 2 事件(零污染、有界);
+   信任分级实况:无凭证/错凭证 POST PlcEdgeReported 被 L2 拒(信任级不足),
+   带 PLC 网关凭证 accepted → drain 后落账;
 4. **质量**:检验计划/任务 → 检测线数据写入 → 划痕(级别 2)自动锁车 →
    锁定期间报工被 **R-QUAL-LOCK** 拦截 → 误扫缺陷(级别越界)被 L2 拦截 →
    返修全流程(NOK 自动再开→OK 关闭)→ `JudgementOverruled` 误判改判(corrects 链)
@@ -149,7 +160,7 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
 7. **读侧**:44 个视图全清单逐个 GET 打印摘要 + 12 个重点视图详打
    (A1/A2/A3、B4 拦截、B5/F14 遍历图、B6 规则决定行、D1、F15、返修流水、
    F9 位置历史、A6 达成率、F16 质量报表)+ AS OF t 对比;
-8. **收尾**:事件 99 / 拦截 5 / 最近快照 #80 → 投影哈希 ×3 重放逐比特一致 →
+8. **收尾**:事件 102 / 拦截 7 / 最近快照 #100 → 投影哈希 ×3 重放逐比特一致 →
    同 db 重建 System(快照 + 增量重放)哈希一致 → 幂等键跨进程重放返回原回执。
 
 ## 46 视图覆盖对照表
@@ -205,6 +216,31 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
 - **读侧行过滤(规则决定行)**:视图 `rules` 引用 consumers=read 的 filter 规则,
   终态视图只渲染通过的行——同一份规则定义,写侧过滤候选、读侧决定行(§4.5)。
 
+## P4:适配层 / 异步结算 / 信任分级
+
+- **适配层(三层过滤 + 映射表契约)**:高频机器信号(PLC 原始流)不是事件类型,
+  先过 `PlcFilter` 三层过滤——[1] 迟滞状态机(越 `on` 进高态、破 `off` 回低态,
+  中间带不动,去抖)→ [2] 驻留(新态须连续稳定 `dwell_ticks` 拍才采信翻转,
+  值回落清零重计)→ [3] 聚合去重(同一迁移沿在 `dedup_window_ticks` 窗口内只出
+  一次)。迁移沿经 `AdapterGateway` 映射表翻译成变化描述候选(type/目标/键/
+  高低态值/actor/锚点/tick 文本),再照常走 `POST /events`——适配器契约:
+  输入外部信号、输出变化描述,别无其他。时间用外部注入的逻辑 tick,不读物理时钟。
+- **异步结算边界**:事件类型注册 `settlement="async"` 后,四层校验(L0-L3)仍同步
+  执行、即时返回拒绝;全部通过才入队,回执 `{"status":"accepted","queue_seq":n}`
+  (异步回执同样幂等)。**悬态口径:候选已验未结——在 `drain_async` 之前不进事件
+  日志、视图看不到它,它悬在 L0(候选)与 L1(事实)之间的队列里。**`drain_async`
+  单写者 FIFO 串行结算,全序保持;settle 内触发的递归候选仍走同步语义。
+- **信任分级**:`EventTypeEntry.min_trust`(非负整数,定义层校验)声明类型的最低
+  信任级;候选 `trust` 低于它在 **L2** 被拒(`信任级不足: <type> 要求 >=N`)。
+  `trust` 是凭证元数据,由入口注入、**不序列化进事件**:HTTP 适配器从
+  `X-MSE-Token` 头查 `ApiGateway::set_trust_tokens` 登记表(未携带/未登记 → 0),
+  进程内 SDK 调用显式传入(如 trust=3)。种子实例:`PlcEdgeReported`
+  (async + min_trust=1,PLC 网关级)与其修正类型 `PlcEdgeVoided`,写
+  `工位占用`(enum 空闲/占用)。
+- **噪声洪峰验证**(红线:噪声洪峰下事件率有界):100000 个在阈值附近抖动并带
+  越阈突刺的含噪采样,经三层过滤只剩 2 个迁移沿(== 真实翻转次数),drain 后
+  事件日志恰增 2 条、零污染(demo 第 3.5 节与测试 26 双重钉死)。
+
 ## 设计纪律
 
 - **append-only**:事件与定义事件只增不改;纠错 = 携带 `corrects` 的新事件(修正链)。
@@ -222,8 +258,8 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
 
 ## 已知边界与后续
 
-- **异步结算未做**:类型注册表保留 `settlement` 字段,本期统一同步结算;
-  批量导入的异步结算器未实现。
+- ~~**异步结算未做**~~(**P4 已实现**:`settlement="async"` 四层校验后入队,
+  `drain_async` 单写者串行结算;见上节"异步结算边界")。批量导入的独立通道未做。
 - **缺陷计数口径**:`缺陷总数` 是"登记累计"(DefectRegistered +1),不随
   DefectCancelled 回减——冲正史在事件树与流水视图完整可查;若业务要"在册缺陷数",
   增一条 on_types=[DefectCancelled] 的 -1 规则即可(定义热更新,不动内核)。
@@ -240,4 +276,5 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
   存储层 `RecordBackend` 的查询算子已扩到 Eq/Ne/Le/Ge/Prefix/IsNull/NotNull
   (Ne/Prefix 为本期新增,锚点路径前缀查询可直接下推到后端)。
 - **HTTP 子集**:仅实现本系统需要的 HTTP/1.1 子集(Content-Length、
-  Connection: close、JSON 响应),鉴权/限流/信任分级未做(文档未决项)。
+  Connection: close、JSON 响应);**信任分级已实现**(`X-MSE-Token` → 信任级 →
+  min_trust L2 校验,见上节),完整鉴权/限流未做(文档未决项)。

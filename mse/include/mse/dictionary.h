@@ -60,7 +60,10 @@ struct EventTypeEntry {
     std::vector<std::string> rules;          // 适用规则引用(校验第 3 层)
     std::string correction;                  // 修正类型引用(可空;每个类型应配平)
     bool        multi_target = false;        // 是否允许一次发生写多个 id
-    std::string settlement = "sync";         // "sync" | "async"(本期统一同步结算,字段保留)
+    std::string settlement = "sync";         // "sync" | "async"(async:四层校验后入队,
+                                           // drain_async 时由单写者串行结算——全序保持)
+    int         min_trust = 0;               // 信任分级:候选 trust 低于此值即拒(L2);
+                                             // 凭证由 API 网关按入口注入(PLC网关/人工UI/外部系统)
     std::string status = "active";
     int64_t     version = 1;
     int64_t     registered_by = 0;

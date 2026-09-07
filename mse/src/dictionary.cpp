@@ -81,6 +81,7 @@ void to_json(json& j, const EventTypeEntry& e) {
         {"correction",    e.correction},
         {"multi_target",  e.multi_target},
         {"settlement",    e.settlement},
+        {"min_trust",     e.min_trust},
         {"status",        e.status},
         {"version",       e.version},
         {"registered_by", e.registered_by},
@@ -94,6 +95,7 @@ void from_json(const json& j, EventTypeEntry& e) {
     e.correction    = j.value("correction", std::string{});
     e.multi_target  = j.value("multi_target", false);
     e.settlement    = j.value("settlement", std::string{"sync"});
+    e.min_trust     = j.value("min_trust", 0);
     e.status        = j.value("status", std::string{"active"});
     e.version       = j.value("version", int64_t{1});
     e.registered_by = j.value("registered_by", int64_t{0});
@@ -316,6 +318,11 @@ Receipt DefinitionLayer::settle_definition(const std::string& def_type, const js
             (!payload.at("settlement").is_string() ||
              (payload.at("settlement") != "sync" && payload.at("settlement") != "async"))) {
             violations.push_back("settlement 非法(须为 sync/async)");
+        }
+        if (payload.contains("min_trust") &&
+            (!payload.at("min_trust").is_number_integer() ||
+             payload.at("min_trust").get<int>() < 0)) {
+            violations.push_back("min_trust 非法(须为非负整数)");
         }
         if (violations.empty()) {
             // required/optional 键必须已在字典登记(未登记 = 编译不过)
