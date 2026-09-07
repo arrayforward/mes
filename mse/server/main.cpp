@@ -40,9 +40,40 @@
 #include "storage/backends/sqlite_backend.h"
 #include "voxelstore/record_voxel_store.h"
 
+#ifdef _WIN32
+#include <windows.h>  // GetModuleFileNameA(可移植路径解析)
+#endif
+#ifdef __linux__
+#include <unistd.h>   // readlink(/proc/self/exe)
+#endif
+
 using nlohmann::json;
 
 namespace {
+
+// ---- 可移植路径解析(发布包纪律) ----
+// 优先编译期钉入的源码路径(开发机);不存在则按 exe 同目录解析
+// (发布包布局:mse_server.exe 与 web/、assets/ 同级)。
+std::filesystem::path exe_dir() {
+#ifdef _WIN32
+    char buf[MAX_PATH] = {0};
+    if (::GetModuleFileNameA(nullptr, buf, MAX_PATH) > 0)
+        return std::filesystem::path(buf).parent_path();
+#endif
+#ifdef __linux__
+    char buf[4096] = {0};
+    const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n > 0) return std::filesystem::path(std::string(buf, (size_t)n)).parent_path();
+#endif
+    return std::filesystem::current_path();
+}
+std::string resolve_dir(const std::string& compile_time, const char* rel) {
+    namespace fs = std::filesystem;
+    if (fs::exists(compile_time)) return compile_time;
+    const fs::path p = exe_dir() / rel;
+    if (fs::exists(p)) return p.string();
+    return compile_time;  // 都找不到:返回原值,错误信息保持可诊断
+}
 
 // ---- SIGINT:置标志位,主循环轮询后优雅 stop(处理函数内不做系统调用) ----
 std::atomic<bool> g_stop{false};
@@ -149,11 +180,12 @@ int main(int argc, char** argv) {
     mse::System sys(backend, &voxel_store);
 
     // ---- 种子:库为空(属性字典无键)或 --seed 时载入 ----
+    const std::string assets_dir = resolve_dir(MSE_ASSETS_DIR, "assets");
     const bool empty = sys.defs().attr_keys().empty();
     if (empty || force_seed) {
         mse::load_system_keys(sys.defs());        // 一切皆属性:系统键先登记
         mse::load_auto_plant_seeds(sys.defs());   // 词典/行为/规则/视图(46 视图)
-        mse::load_wasm_seeds(sys.defs(), MSE_ASSETS_DIR);  // WASM 规则沙盒
+        mse::load_wasm_seeds(sys.defs(), assets_dir);  // WASM 规则沙盒
         // WASM 规则接入类型(与 demo 第 0 节同一立法):SequenceAdjusted 双拦截
         const json wasm_wire = sys.api().post_definition(
             "EventTypeRegistered",
@@ -170,8 +202,8 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    sys.knowledge().load(std::string(MSE_ASSETS_DIR) + "/ontology_seed.json",
-                         std::string(MSE_ASSETS_DIR) + "/lexicon.json");
+    sys.knowledge().load(assets_dir + "/ontology_seed.json",
+                         assets_dir + "/lexicon.json");
 
     // 信任分级:凭证 → 信任级(HTTP 头 X-MSE-Token 查表;未携带/未登记 → 0)
     sys.api().set_trust_tokens({{"ui-token", 2}, {"plc-gw-token", 1}, {"erp-token", 1}});
@@ -192,8 +224,9 @@ int main(int argc, char** argv) {
     std::printf("  凭证(X-MSE-Token):ui-token(L2) / plc-gw-token(L1) / erp-token(L1)\n");
     std::printf("============================================================\n");
 
-    // ---- 静态资源根(编译期钉入,启动即规范化一次) ----
-    const std::filesystem::path web_root = std::filesystem::weakly_canonical(MSE_WEB_DIR);
+    // ---- 静态资源根(编译期路径优先,发布包按 exe 同目录 web/ 解析) ----
+    const std::filesystem::path web_root =
+        std::filesystem::weakly_canonical(resolve_dir(MSE_WEB_DIR, "web"));
 
     // 写侧管线是单写者:所有请求经一把互斥锁串行化(验证服务器,简单优先)
     std::mutex mu;
