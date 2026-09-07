@@ -344,10 +344,14 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
                   {"reject":"R-SEQ-FROZEN:已冻结订单禁止调序/换单"},
                   {"pass":true}]})"));
     // B4 防错防漏:扫描物料编号须在本工位 BOM 清单内(target=工位本体)。
+    // B4 防错防漏:扫描物料编号须在本工位 BOM 清单内(target=工位本体);
+    // 工位无 BOM(非装配工位/未下达)→ 明确拒绝(写侧 null 注入后必走到)。
     reg_rule(defs, rule_payload("R-MAT-PKE", {"BOM清单"}, "filter", "",
-        R"({"if":[{"in":[{"write":"物料编号"},{"var":"BOM清单"}]},
-                  {"pass":true},
-                  {"reject":"R-MAT-PKE:扫描物料不在 BOM 内,错装/漏装报警"}]})"));
+        R"({"if":[{"==":[{"var":"BOM清单"},null]},
+                  {"reject":"R-MAT-PKE:该工位无 BOM 清单,禁止校验"},
+                  {"if":[{"in":[{"write":"物料编号"},{"var":"BOM清单"}]},
+                         {"pass":true},
+                         {"reject":"R-MAT-PKE:扫描物料不在 BOM 内,错装/漏装报警"}]}]})"));
     // 质量锁定:已锁车辆不得下线(下线类事件:ProductionReported)。
     reg_rule(defs, rule_payload("R-QUAL-LOCK", {"锁定状态"}, "filter", "",
         R"({"if":[{"==":[{"var":"锁定状态"},"已锁"]},

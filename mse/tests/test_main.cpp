@@ -2018,6 +2018,13 @@ static void test_write_rule_null_injection() {
     }
     // 读侧行过滤不适用 null 注入:B6 看板里缺 呼叫状态 的行不受 R-VIEW-CALL 约束
     // (行可见性语义不变——由既有 pull/call 视图测试覆盖)
+
+    // fail-closed:无 BOM 工位扫码 → R-MAT-PKE 拒绝(不崩、不 500)
+    const mse::Receipt bad = post(f.sys, "MaterialVerified", "工位02",
+                                  {{"物料编号", "MAT-1001"}}, "op");
+    CHECK(!settled(bad));
+    CHECK(bad.layer == 3);
+    CHECK(!bad.violations.empty());
 }
 
 static void test_button_context() {

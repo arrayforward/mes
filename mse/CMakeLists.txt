@@ -109,7 +109,7 @@ target_compile_options(mse PRIVATE -Wall -Wextra)
 # MinGW 运行库静态链接,exe 可脱离 mingw64/bin 独立运行
 set(MSE_STATIC_RUNTIME)
 if(MINGW)
-    set(MSE_STATIC_RUNTIME -static-libgcc -static-libstdc++)
+    set(MSE_STATIC_RUNTIME -static)  # 全静态(含 winpthread);ws2_32 等系统 DLL 仍为导入表
 endif()
 
 # ---- 汽车生产短流程模拟验证 ----

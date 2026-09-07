@@ -615,7 +615,14 @@ std::vector<std::string> RuleEngine::eval_filters(
                 injected[d] =
                     (attrs.is_object() && attrs.contains(d)) ? attrs[d] : json(nullptr);
 
-            const RuleOutcome out = eval(rule, injected, candidate, target);
+            // fail-closed:规则执行错误(定义层 bug)按拒绝处理,绝不上炸成 500
+            RuleOutcome out;
+            try {
+                out = eval(rule, injected, candidate, target);
+            } catch (const RuleError& e) {
+                violations.push_back(rule.rule_id + ":规则执行错误(fail-closed): " + e.what());
+                continue;
+            }
             if (out.kind == RuleOutcome::Kind::kReject) {
                 violations.push_back(rule.rule_id + ":" + out.reason);
             }
