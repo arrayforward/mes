@@ -9,6 +9,13 @@
 - `stop_mes.bat` —— 停止服务器
 - `web/` —— H5 界面(React,免构建,服务器托管)
 - `assets/` —— 种子资产(制造域本体/词典/WASM 规则产物)
+- `tools/` —— 剧本回归脚本(ui_playbook.py,可选,需本机有 Python)
+- `api-ms-win-crt-*.dll`、`ucrtbase.dll` —— UCRT 运行库(应用本地部署)
+
+## 运行环境
+
+任何 Windows(7 SP1 起)。全部依赖已静态链接或随包携带,**不需要安装
+MinGW/任何运行库**。Win10/11 直接使用系统组件,包内 dll 不冲突。
 
 ## 快速开始
 
