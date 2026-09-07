@@ -1990,6 +1990,36 @@ static void test_view_emit_presets() {
 // ============================================================================
 // 31. 按钮 context:行上已有属性值随按钮下发(presets 优先)
 // ============================================================================
+// ============================================================================
+// 32. 写侧规则 null 注入:类型显式引用的规则对缺失 deps 键按 null 求值
+//     ("初始状态"立法得以生效;读写同一口径——按钮 options 与结算一致)
+// ============================================================================
+static void test_write_rule_null_injection() {
+    banner("32. 写侧规则 null 注入(初始状态立法生效)");
+    Fixture f;
+
+    // 新订单(只有 车型,没有 计划状态)
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-NULL-1", {{"车型", "SUV-A"}})));
+    // 初始只能进入 01:直接发 03 被 R-PLAN-RELEASE 拒(规则不再因缺键被跳过)
+    CHECK(!settled(post(f.sys, "PlanReleased", "VIN-NULL-1", {{"计划状态", "03"}})));
+    CHECK(settled(post(f.sys, "PlanReleased", "VIN-NULL-1", {{"计划状态", "01"}})));
+    // 未进 A3 队列的订单(另一新单)可调序(R-PLAN-ADJUST jsonlogic+WASM 双口径 null pass)
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-NULL-2", {{"车型", "Sedan-B"}})));
+    CHECK(settled(post(f.sys, "SequenceAdjusted", "VIN-NULL-2", {{"序列号", 7}})));
+    // 按钮 options 与结算同口径:无状态订单的 PlanReleased 只有 01 合法
+    const json v = f.sys.views().render("V-PLAN-A3", mse::ViewParams{});
+    for (const json& row : v["rows"]) {
+        if (row["id"] != "VIN-NULL-2") continue;
+        for (const json& b : row["buttons"]) {
+            if (b["type"] != "PlanReleased") continue;
+            CHECK(b["enabled"] == true);
+            CHECK_EQ(b["options"].at("计划状态"), json::array({"01"}));
+        }
+    }
+    // 读侧行过滤不适用 null 注入:B6 看板里缺 呼叫状态 的行不受 R-VIEW-CALL 约束
+    // (行可见性语义不变——由既有 pull/call 视图测试覆盖)
+}
+
 static void test_button_context() {
     banner("31. 按钮 context:行上已有属性值随按钮下发(presets 优先)");
     Fixture f;
@@ -2060,6 +2090,7 @@ int main() {
     test_button_options_and_flow_actions();
     test_view_emit_presets();
     test_button_context();
+    test_write_rule_null_injection();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

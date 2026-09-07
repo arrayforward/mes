@@ -597,16 +597,23 @@ std::vector<std::string> RuleEngine::eval_filters(
         if (rule.consumers != side && rule.consumers != "both") continue;
 
         for (const auto& [target, attrs] : attrs_per_target) {
-            // 适用性:本体(变化后)聚合了 deps 全部键
+            // 适用性:
+            //  - 读侧行过滤(side=="read"):本体须聚合 deps 全部键才适用
+            //    (缺键的行不受该规则约束,保持可见);
+            //  - 写侧(L3/按钮):类型显式引用的规则一律求值,缺失的 deps 键
+            //    注入 null——"初始状态"分支(如状态机的"无状态只能进 01")
+            //    就是写在 null 上的;读写两侧同一口径,可点 ⇔ 可结算。
             bool applicable = attrs.is_object();
             for (const auto& d : rule.deps) {
                 if (!applicable || !attrs.contains(d)) { applicable = false; break; }
             }
-            if (!applicable) continue;
+            if (!applicable && side == "read") continue;
 
-            // 最小权限:只注入 deps 声明的键
+            // 最小权限:只注入 deps 声明的键(缺失注入 null)
             json injected = json::object();
-            for (const auto& d : rule.deps) injected[d] = attrs.at(d);
+            for (const auto& d : rule.deps)
+                injected[d] =
+                    (attrs.is_object() && attrs.contains(d)) ? attrs[d] : json(nullptr);
 
             const RuleOutcome out = eval(rule, injected, candidate, target);
             if (out.kind == RuleOutcome::Kind::kReject) {

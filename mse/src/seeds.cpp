@@ -319,7 +319,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     // -- 写侧 filter(consumers=both:写侧 L3 与读侧按钮可用性同一份) --
     // A3 五状态机:仅 01/02 可直接调整顺序,03/04 须退回再调整,05 绝对禁止。
     reg_rule(defs, rule_payload("R-PLAN-ADJUST", {"计划状态"}, "filter", "",
-        R"({"if":[{"in":[{"var":"计划状态"},["01","02"]]},
+        R"({"if":[{"or":[{"==":[{"var":"计划状态"},null]},
+                         {"in":[{"var":"计划状态"},["01","02"]]}]},
                   {"pass":true},
                   {"reject":"R-PLAN-ADJUST:03/04 须退回再调整,05 绝对禁止调整"}]})"));
     // 计划下发合法迁移:01→02→03→04→05,03/04 可退回 01;新车单初始只能进入 01。

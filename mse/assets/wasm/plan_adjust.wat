@@ -1,9 +1,10 @@
 ;; ============================================================================
 ;; plan_adjust.wat —— R-PLAN-ADJUST-WASM:A3 五状态机调序过滤(WASM 版)
 ;;
-;; 与 jsonlogic 种子 R-PLAN-ADJUST 同一立法:
+;; 与 jsonlogic 种子 R-PLAN-ADJUST 同一立法(读写同一份规则的 WASM 化身):
 ;;   计划状态 ∈ {01,02} → pass;03/04 须退回、05 绝对禁止 → reject;
-;;   状态未知(attrs 无此键 / 形状非法)→ reject(未知不允许调整)。
+;;   键缺失(初始状态,null)→ pass(未进 A3 队列的订单处于 A2 排序阶段);
+;;   形状非法(存在但非带引号两字符)→ reject。
 ;; ABI:宿主导入 "mse".{attr_len,attr_get,result};导出 memory + mse_eval。
 ;; 值按 JSON 文本传输:字符串 "01" 的字节形态是带引号的 4 字节 "\"01\""。
 ;; 汇编:wat2wasm plan_adjust.wat -o plan_adjust.wasm(产物随仓库提交,
@@ -45,8 +46,11 @@
 
   (func (export "mse_eval")
     (local $len i32)
-    ;; 状态未知(键不存在 → -1)或不是带引号两字符(4 字节)→ reject
+    ;; 键缺失(初始状态,attr_len 返回 -1)→ pass;存在但非 4 字节 → reject
     (local.set $len (call $attr_len (i32.const 0) (i32.const 12)))
+    (if (i32.eq (local.get $len) (i32.const -1))
+      (then (call $result (i32.const 32) (i32.const 4) (i32.const 0) (i32.const 0))
+            (return)))
     (if (i32.ne (local.get $len) (i32.const 4))
       (then (call $reject) (return)))
     ;; 取属性值 JSON 文本到缓冲区;长度不符(含 -2 截断)→ reject

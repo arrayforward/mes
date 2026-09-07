@@ -129,12 +129,15 @@ bool guest_write(void* _mem, IM3Runtime runtime, uint32_t ptr, const std::string
     return true;
 }
 
-// 键 → JSON 文本值。key ∉ deps → false(返回 -1"不存在");∈ deps 但无值 → null。
+// 键 → JSON 文本值。key ∉ deps → false(返回 -1"不存在");∈ deps 但无值或
+// 值为 null → 同样 false:ABI 层 null == 缺失(与 JSON-logic 侧 var 缺失
+// 得 null、规则按"无值"处理同一口径——双运行时语义一致)。
 bool lookup_json_text(const std::string& key, const HostCtx& hc, const json* bag,
                       std::string& out) {
     if (hc.deps.count(key) == 0) return false;
     json v = nullptr;
     if (bag != nullptr && bag->is_object() && bag->contains(key)) v = bag->at(key);
+    if (v.is_null()) return false;
     out = v.dump();
     return true;
 }
