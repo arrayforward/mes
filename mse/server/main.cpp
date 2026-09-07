@@ -12,7 +12,7 @@
 //         其余非 API 的 GET 路径也按 web 根静态文件处理(index.html 的
 //         相对引用 vendor/、app.js 以 / 为基准解析)
 //
-// 用法:mse_server [--port 8080] [--db mse_server.db]
+// 用法:mse_server [--host 127.0.0.1] [--port 18080] [--db mse_server.db]
 //                 [--voxel-db mse_server_voxels.db] [--seed]
 //   --seed:即使库非空也强制重放种子定义(定义热更新,append-only 语义)。
 //   种子含 SequenceAdjusted 的 WASM 规则接入(R-PLAN-ADJUST-WASM 与
@@ -49,7 +49,7 @@ std::atomic<bool> g_stop{false};
 void on_sigint(int) { g_stop.store(true); }
 
 void print_usage(const char* argv0) {
-    std::printf("用法:%s [--port 8080] [--db mse_server.db] "
+    std::printf("用法:%s [--host 127.0.0.1] [--port 18080] [--db mse_server.db] "
                 "[--voxel-db mse_server_voxels.db] [--seed]\n", argv0);
 }
 
@@ -105,7 +105,10 @@ int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
     // ---- 命令行 ----
-    uint16_t    port = 8080;
+    uint16_t    port = 18080;              // 默认避开 8080(常被本机服务占用)
+    std::string host = "127.0.0.1";  // 默认只绑环回:0.0.0.0 通配绑定会与
+                                     // 已占用 127.0.0.1:port 的服务静默共存,
+                                     // 浏览器按更具体的绑定路由 → 页面打不开
     std::string db_path = "mse_server.db";
     std::string voxel_db_path = "mse_server_voxels.db";
     bool        force_seed = false;
@@ -119,7 +122,9 @@ int main(int argc, char** argv) {
             }
             return argv[++i];
         };
-        if (a == "--port") {
+        if (a == "--host") {
+            host = need_value("--host");
+        } else if (a == "--port") {
             port = static_cast<uint16_t>(std::atoi(need_value("--port")));
         } else if (a == "--db") {
             db_path = need_value("--db");
@@ -195,7 +200,7 @@ int main(int argc, char** argv) {
 
     mse::HttpServer server;
     const bool listening =
-        server.listen_on("0.0.0.0", port, [&](const mse::HttpRequest& req) {
+        server.listen_on(host, port, [&](const mse::HttpRequest& req) {
             std::lock_guard<std::mutex> lock(mu);
 
             // 写动词:POST /events(凭证头 → 信任级)
