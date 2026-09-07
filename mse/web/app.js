@@ -159,7 +159,7 @@
   /* ================= 拦截视图 ================= */
   function RejectionCards(props) {
     const rejs = props.rejections || [];
-    if (rejs.length === 0) return html`<div class="muted" style="margin-bottom:12px">当前无拦截记录</div>`;
+    if (rejs.length === 0) return html`<div class="muted" style=${{marginBottom:"12px"}}>当前无拦截记录</div>`;
     return html`<div class="rej-cards">
       ${rejs.map(function (rj, i) {
         const lv = rj.layer !== undefined ? rj.layer : 0;
@@ -479,7 +479,7 @@
                 ${anchors.map(function (a) { return html`<option key=${a.path} value=${a.path}>${a.path}${a.name ? ' (' + a.name + ')' : ''}</option>`; })}
                 <option value="__custom__">模糊文本(自由输入)…</option>
               </select>
-              ${vals.space === '__custom__' && html`<input type="text" style="margin-top:4px" placeholder="原始位置文本"
+              ${vals.space === '__custom__' && html`<input type="text" style=${{marginTop:"4px"}} placeholder="原始位置文本"
                 value=${vals.space_custom} onChange=${function (e) { setVal('space_custom', e.target.value); }} />`}
             </span>`)}
           ${sysRow('time', 'time(ISO)',
@@ -507,7 +507,7 @@
             ${receipt.status === 'settled' && html`<div class="receipt settled">✔ 已落账 settled,event_id = ${receipt.event_id}</div>`}
             ${receipt.status === 'accepted' && html`<div class="receipt accepted">
               ◆ 已受理 accepted,queue_seq = ${receipt.queue_seq}(异步结算队列)
-              <button class="btn" style="margin-left:8px" onClick=${drain}>落账(POST /drain)</button>
+              <button class="btn" style=${{marginLeft:"8px"}} onClick=${drain}>落账(POST /drain)</button>
             </div>`}
             ${receipt.status === 'rejected' && html`<div class="receipt rejected">
               ✖ 被拒绝 rejected,layer = ${receipt.layer}(${LAYER_NAMES[receipt.layer] || '未知'})
@@ -573,11 +573,11 @@
         ${(props.ontologies || []).map(function (o) { return html`<option key=${o.id} value=${o.id} />`; })}
       </datalist>
       <label>AS OF t
-        <input type="number" step="1" style="width:90px" value=${props.asOf} placeholder="空=当前"
+        <input type="number" step="1" style=${{width:"90px"}} value=${props.asOf} placeholder="空=当前"
           onChange=${function (e) { props.setAsOf(e.target.value); }} />
       </label>
       <label>凭证
-        <input type="text" style="width:120px" value=${props.token} title="X-MSE-Token"
+        <input type="text" style=${{width:"120px"}} value=${props.token} title="X-MSE-Token"
           onChange=${function (e) { props.setToken(e.target.value); }} />
       </label>
       <button class="btn primary" onClick=${props.onRefresh}>刷新</button>
