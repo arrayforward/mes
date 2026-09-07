@@ -64,6 +64,9 @@ struct EventTypeEntry {
                                            // drain_async 时由单写者串行结算——全序保持)
     int         min_trust = 0;               // 信任分级:候选 trust 低于此值即拒(L2);
                                              // 凭证由 API 网关按入口注入(PLC网关/人工UI/外部系统)
+    json        presets = json::object();    // 固定写入值:该类型的语义动作自带的变化
+                                             // (如 MaterialCallAnswered → {"呼叫状态":"已响应"});
+                                             // 视图按钮携带它,表单预填;写侧可配 filter 规则强制
     std::string status = "active";
     int64_t     version = 1;
     int64_t     registered_by = 0;

@@ -66,19 +66,23 @@ json attr_payload(const std::string& key, const std::string& semantic,
             {"kind", kind},       {"rule_ref", rule_ref}};
 }
 
-// 事件类型条目的便捷组装(修正类型配平由调用方保证先注册)
+// 事件类型条目的便捷组装(修正类型配平由调用方保证先注册;
+// presets 非空才写入负载——固定写入值,按钮语义自带的表单预填)
 json type_payload(const std::string& type,
                   std::initializer_list<const char*> required,
                   std::initializer_list<const char*> optional,
                   std::initializer_list<const char*> rules,
-                  const std::string& correction, bool multi_target) {
-    return {{"type", type},
-            {"required_keys", json(required)},
-            {"optional_keys", json(optional)},
-            {"rules", json(rules)},
-            {"correction", correction},
-            {"multi_target", multi_target},
-            {"settlement", "sync"}};
+                  const std::string& correction, bool multi_target,
+                  const json& presets = json::object()) {
+    json p = {{"type", type},
+              {"required_keys", json(required)},
+              {"optional_keys", json(optional)},
+              {"rules", json(rules)},
+              {"correction", correction},
+              {"multi_target", multi_target},
+              {"settlement", "sync"}};
+    if (!presets.empty()) p["presets"] = presets;
+    return p;
 }
 
 // 规则条目的便捷组装(logic 为 JSON-logic 方言文本;on_types 仅 derive/trigger 有效)
@@ -347,6 +351,13 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         R"({"if":[{"==":[{"var":"锁定状态"},"已锁"]},
                   {"reject":"R-QUAL-LOCK:锁定车辆不得下线"},
                   {"pass":true}]})"));
+    // presets 写侧强约束示范:应答类事件的固定写入值由 filter 立法强制一致
+    // (挂到 MaterialCallAnswered / CallAcknowledged;其余带 presets 的类型
+    //  如需强约束照此立法,为免规则爆炸不逐类型配)。
+    reg_rule(defs, rule_payload("R-CALL-ANSWER-VAL", {"呼叫状态"}, "filter", "",
+        R"({"if":[{"==":[{"write":"呼叫状态"},"已响应"]},
+                  {"pass":true},
+                  {"reject":"R-CALL-ANSWER-VAL:应答必须把呼叫状态写为已响应"}]})"));
 
     // -- trigger --
     // 缺陷级别 ≥ 2 → 对同一辆车触发锁定候选(trigger 靠属性谓词自动匹配)。
@@ -461,15 +472,23 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     reg_type(defs, type_payload("BindingVoided", {"id", "actor"}, {"批次绑定", "VIN绑定"}, {}, "", true));
     reg_type(defs, type_payload("BatchBoundToVIN", {"id", "actor"}, {"批次绑定", "VIN绑定"},
                                 {}, "BindingVoided", true));
-    reg_type(defs, type_payload("MaterialCallCancelled", {"id", "actor", "呼叫状态"}, {"缺料工位"}, {}, "", false));
+    reg_type(defs, type_payload("MaterialCallCancelled", {"id", "actor", "呼叫状态"}, {"缺料工位"}, {}, "", false,
+                                {{"呼叫状态", "已取消"}}));
     reg_type(defs, type_payload("MaterialCallRaised", {"id", "actor", "呼叫状态", "缺料工位"},
-                                {}, {}, "MaterialCallCancelled", false));
-    reg_type(defs, type_payload("MaterialCallAnswered", {"id", "actor", "呼叫状态"}, {}, {}, "", false));
-    reg_type(defs, type_payload("PullOrderCancelled", {"id", "actor", "拉动状态"}, {"拉动类型"}, {}, "", false));
+                                {}, {}, "MaterialCallCancelled", false,
+                                {{"呼叫状态", "呼叫中"}}));
+    reg_type(defs, type_payload("MaterialCallAnswered", {"id", "actor", "呼叫状态"}, {},
+                                {"R-CALL-ANSWER-VAL"}, "", false,
+                                {{"呼叫状态", "已响应"}}));
+    reg_type(defs, type_payload("PullOrderCancelled", {"id", "actor", "拉动状态"}, {"拉动类型"}, {}, "", false,
+                                {{"拉动状态", "已取消"}}));
     reg_type(defs, type_payload("PullOrderCreated", {"id", "actor", "拉动类型", "拉动状态", "物料编号"},
-                                {"库存数量"}, {}, "PullOrderCancelled", false));
-    reg_type(defs, type_payload("PullOrderShipped", {"id", "actor", "拉动状态"}, {}, {}, "", false));
-    reg_type(defs, type_payload("PullOrderReceived", {"id", "actor", "拉动状态"}, {}, {}, "", false));
+                                {"库存数量"}, {}, "PullOrderCancelled", false,
+                                {{"拉动状态", "已创建"}}));
+    reg_type(defs, type_payload("PullOrderShipped", {"id", "actor", "拉动状态"}, {}, {}, "", false,
+                                {{"拉动状态", "已发货"}}));
+    reg_type(defs, type_payload("PullOrderReceived", {"id", "actor", "拉动状态"}, {}, {}, "", false,
+                                {{"拉动状态", "已收货"}}));
 
     // -- C AVI --
     reg_type(defs, type_payload("PassageCorrected", {"id", "actor"}, {"过点区域"}, {}, "", false));
@@ -477,12 +496,18 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     reg_type(defs, type_payload("VehicleExitedZone", {"id", "actor"}, {"过点区域"}, {}, "PassageCorrected", false));
 
     // -- D ANDON --
-    reg_type(defs, type_payload("CallCancelled", {"id", "actor", "呼叫状态"}, {"呼叫类型"}, {}, "", false));
+    reg_type(defs, type_payload("CallCancelled", {"id", "actor", "呼叫状态"}, {"呼叫类型"}, {}, "", false,
+                                {{"呼叫状态", "已取消"}}));
     reg_type(defs, type_payload("CallRaised", {"id", "actor", "呼叫类型", "呼叫状态"},
-                                {}, {}, "CallCancelled", false));
-    reg_type(defs, type_payload("CallAcknowledged", {"id", "actor", "呼叫状态"}, {}, {}, "", false));
-    reg_type(defs, type_payload("LineStopped", {"id", "actor", "线状态"}, {"停线原因"}, {}, "", false));
-    reg_type(defs, type_payload("LineResumed", {"id", "actor", "线状态"}, {}, {}, "", false));
+                                {}, {}, "CallCancelled", false,
+                                {{"呼叫状态", "呼叫中"}}));
+    reg_type(defs, type_payload("CallAcknowledged", {"id", "actor", "呼叫状态"}, {},
+                                {"R-CALL-ANSWER-VAL"}, "", false,
+                                {{"呼叫状态", "已响应"}}));
+    reg_type(defs, type_payload("LineStopped", {"id", "actor", "线状态"}, {"停线原因"}, {}, "", false,
+                                {{"线状态", "停线"}}));
+    reg_type(defs, type_payload("LineResumed", {"id", "actor", "线状态"}, {}, {}, "", false,
+                                {{"线状态", "运行"}}));
 
     // -- E PMC --
     reg_type(defs, type_payload("FaultAlarmed", {"id", "actor", "检点", "故障码"},
@@ -498,8 +523,10 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     reg_type(defs, type_payload("DefectCancelled", {"id", "actor"}, {"车漆", "缺陷级别"}, {}, "", false));
     reg_type(defs, type_payload("DefectRegistered", {"id", "actor", "车漆", "缺陷级别"},
                                 {"evidence"}, {}, "DefectCancelled", false));
-    reg_type(defs, type_payload("VehicleUnlocked", {"id", "actor"}, {"锁定状态"}, {}, "", false));
-    reg_type(defs, type_payload("VehicleLocked", {"id", "actor", "锁定状态"}, {}, {}, "VehicleUnlocked", false));
+    reg_type(defs, type_payload("VehicleUnlocked", {"id", "actor"}, {"锁定状态"}, {}, "", false,
+                                {{"锁定状态", "未锁"}}));
+    reg_type(defs, type_payload("VehicleLocked", {"id", "actor", "锁定状态"}, {}, {}, "VehicleUnlocked", false,
+                                {{"锁定状态", "已锁"}}));
     reg_type(defs, type_payload("ReworkCancelled", {"id", "actor"}, {}, {}, "", false));
     reg_type(defs, type_payload("ReworkRequested", {"id", "actor"}, {}, {}, "ReworkCancelled", false));
     reg_type(defs, type_payload("ReworkRecorded", {"id", "actor", "返修内容"}, {}, {}, "", false));

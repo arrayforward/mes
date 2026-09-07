@@ -141,7 +141,7 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
 `web/` 验证台(React 18 UMD + htm,免构建,vendor 已本地化,离线可用)。
 
 ```bash
-./mse/build/mse_server --port 18080     # 空库自动装种子(216 条定义 + WASM 规则接入)
+./mse/build/mse_server --port 18080     # 空库自动装种子(217 条定义 + WASM 规则接入)
 # 浏览器打开 http://127.0.0.1:18080/
 ```
 
@@ -151,9 +151,10 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
   `plc-gw-token`(L1)、`erp-token`(L1);不带/错凭证 trust=0——`PlcEdgeReported`
   (min_trust=1)会被 L2 拒,可现场演示信任分级。
 - **发起事件**:"+ 发起事件"按事件类型注册表自动生成表单(系统键 + 属性键;
-  enum 下拉/值域/单位/必填全部来自属性字典);回执三态:settled(落账 event_id)、
-  rejected(layer + violations 红框展示)、accepted(异步悬态,点"落账"触发
-  POST /drain 后进日志)。
+  enum 下拉/值域/单位/必填全部来自属性字典);按钮自带预置值——打开表单时把
+  类型的 `presets` 写入初值(字段旁 ● 标记,可改,写侧规则兜底);回执三态:
+  settled(落账 event_id)、rejected(layer + violations 红框展示)、
+  accepted(异步悬态,点"落账"触发 POST /drain 后进日志)。
 - **拦截反馈**:拦截视图(V-PKE-B4、V-DEFECT-F10)把 RejectionLog 渲染为
   分层着色卡片(L0 格式 / L1 字典 / L2 信任 / L3 规则),附候选原文。
 - **观察者 / 实体 / AS OF**:观察者下拉来自当前视图的 variants;entity 喂遍历与
@@ -255,6 +256,12 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
   列入 on_types 即可让派生值随修正回摆(达成率/FTT 均覆盖 ReportReversed)。
 - **读侧行过滤(规则决定行)**:视图 `rules` 引用 consumers=read 的 filter 规则,
   终态视图只渲染通过的行——同一份规则定义,写侧过滤候选、读侧决定行(§4.5)。
+- **presets(固定写入值)**:事件类型注册表条目可声明 `presets`(如
+  `MaterialCallAnswered → {"呼叫状态":"已响应"}`)——该类型语义动作自带的变化。
+  注册校验:presets 须为 object,键须已登记、值在该键值域内(range 非空时)、
+  键须列入 required/optional_keys。视图按钮与顶层 actions 携带 presets 供表单
+  预填;按钮可用性按 presets 并入合成候选求值。写侧如需强制一致,照
+  `R-CALL-ANSWER-VAL` 立法(filter 规则挂到类型 rules,种子仅对呼叫两类示范)。
 
 ## P4:适配层 / 异步结算 / 信任分级
 

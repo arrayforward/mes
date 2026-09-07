@@ -82,6 +82,7 @@ void to_json(json& j, const EventTypeEntry& e) {
         {"multi_target",  e.multi_target},
         {"settlement",    e.settlement},
         {"min_trust",     e.min_trust},
+        {"presets",       e.presets},
         {"status",        e.status},
         {"version",       e.version},
         {"registered_by", e.registered_by},
@@ -96,6 +97,7 @@ void from_json(const json& j, EventTypeEntry& e) {
     e.multi_target  = j.value("multi_target", false);
     e.settlement    = j.value("settlement", std::string{"sync"});
     e.min_trust     = j.value("min_trust", 0);
+    e.presets       = j.value("presets", json::object());
     e.status        = j.value("status", std::string{"active"});
     e.version       = j.value("version", int64_t{1});
     e.registered_by = j.value("registered_by", int64_t{0});
@@ -324,6 +326,9 @@ Receipt DefinitionLayer::settle_definition(const std::string& def_type, const js
              payload.at("min_trust").get<int>() < 0)) {
             violations.push_back("min_trust 非法(须为非负整数)");
         }
+        if (payload.contains("presets") && !payload.at("presets").is_object()) {
+            violations.push_back("字段 presets 须为 object");
+        }
         if (violations.empty()) {
             // required/optional 键必须已在字典登记(未登记 = 编译不过)
             for (const char* f : {"required_keys", "optional_keys"}) {
@@ -342,6 +347,30 @@ Receipt DefinitionLayer::settle_definition(const std::string& def_type, const js
             const std::string corr = payload.value("correction", std::string{});
             if (!corr.empty() && types_.count(corr) == 0) {
                 violations.push_back("修正类型未注册: " + corr);
+            }
+            // presets(固定写入值):键须已登记、在该键值域内(range 非空时)、
+            // 且出现在 required/optional_keys 清单里(预置的是表单字段,清单外即违规)
+            if (payload.contains("presets")) {
+                const json& presets = payload.at("presets");
+                std::set<std::string> declared;
+                for (const char* f : {"required_keys", "optional_keys"})
+                    for (const auto& k : str_list(payload, f)) declared.insert(k);
+                for (const auto& [k, v] : presets.items()) {
+                    auto ait = dict_.find(k);
+                    if (ait == dict_.end()) {
+                        violations.push_back("presets 引用未登记键: " + k);
+                        continue;
+                    }
+                    if (declared.count(k) == 0) {
+                        violations.push_back(
+                            "presets 键未列入 required/optional_keys: " + k);
+                    }
+                    const auto& range = ait->second.range;
+                    if (!range.empty() &&
+                        std::find(range.begin(), range.end(), v) == range.end()) {
+                        violations.push_back("presets 值超出键值域: " + k);
+                    }
+                }
             }
             if (payload.at("type").get<std::string>().empty()) {
                 violations.push_back("type 不能为空");

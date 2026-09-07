@@ -256,16 +256,23 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
             for (const std::string& col : columns)
                 row[col] = attrs.contains(col) ? attrs[col] : json(nullptr);
 
-            // 行级按钮:每个 emit 类型求其 rules 引用的 filter 规则(与写侧 L3 同一份)
+            // 行级按钮:每个 emit 类型求其 rules 引用的 filter 规则(与写侧 L3 同一份)。
+            // 按钮可用性按"该类型的语义动作自带写入(presets)"求值:固定写入值并入
+            // 合成候选的变化集,写值类 filter 规则(如 R-CALL-ANSWER-VAL)看到的即
+            // 按钮真实会带的写入;按钮输出携带 presets 供表单预填(空 object 也带)。
             json buttons = json::array();
             for (const std::string& t : emits) {
                 const EventTypeEntry* te = defs_.find_event_type(t);
+                const json presets = te ? te->presets : json::object();
                 const std::vector<std::string> refs =
                     te ? te->rules : std::vector<std::string>{};
+                cand.writes[id] = presets;
                 std::vector<std::string> reasons =
                     rules_.eval_filters(refs, defs_.rules(), attrs_per_target, cand);
-                buttons.push_back(
-                    {{"type", t}, {"enabled", reasons.empty()}, {"reasons", reasons}});
+                buttons.push_back({{"type", t},
+                                   {"enabled", reasons.empty()},
+                                   {"reasons", reasons},
+                                   {"presets", presets}});
             }
             row["buttons"] = std::move(buttons);
             rows.push_back(std::move(row));
@@ -322,9 +329,13 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
         out["rejections"] = std::move(rejections);
     }
 
-    // 视图级 actions:仅列可发起类型(行级可用性在 buttons)
+    // 视图级 actions:仅列可发起类型(行级可用性在 buttons);presets 随动作携带
     json actions = json::array();
-    for (const std::string& t : emits) actions.push_back({{"type", t}});
+    for (const std::string& t : emits) {
+        const EventTypeEntry* te = defs_.find_event_type(t);
+        actions.push_back(
+            {{"type", t}, {"presets", te ? te->presets : json::object()}});
+    }
     out["actions"] = std::move(actions);
 
     return out;

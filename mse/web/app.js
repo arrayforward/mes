@@ -312,9 +312,22 @@
     const types = props.eventTypes || [];
     const attrMap = props.attrMap || {};
     const prefill = props.prefill || {};
+    /* 类型预置值(presets):按钮/动作的语义自带写入,打开表单时写入初值;
+       字段控件照常可改(用户可改,写侧规则兜底) */
+    function presetsOf(name) {
+      const t = types.find(function (x) { return x.type === name; });
+      return (t && t.presets) || {};
+    }
+    function applyPresets(obj, name) {
+      const ps = presetsOf(name);
+      Object.keys(ps).forEach(function (k) {
+        const v = ps[k];
+        obj[k] = (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
+      });
+    }
     const [typeName, setTypeName] = useState(prefill.type || (types[0] && types[0].type) || '');
     const [vals, setVals] = useState(function () {
-      return {
+      const init = {
         id: prefill.id !== undefined ? String(prefill.id) : '',
         actor: 'ui-user',
         space: '',
@@ -324,6 +337,8 @@
         evidence: '',
         idempotency_key: ''
       };
+      applyPresets(init, prefill.type || (types[0] && types[0].type) || '');
+      return init;
     });
     const [errs, setErrs] = useState({});
     const [receipt, setReceipt] = useState(null);
@@ -337,6 +352,7 @@
       if (!typeDef) return [];
       const req = typeDef.required_keys || [];
       const opt = typeDef.optional_keys || [];
+      const presets = typeDef.presets || {};
       const all = req.concat(opt).filter(function (k) { return SYS_KEYS.indexOf(k) < 0; });
       return all.filter(function (k, i) { return all.indexOf(k) === i; }).map(function (k) {
         const a = attrMap[k] || {};
@@ -346,7 +362,8 @@
           unit: a.unit,
           range: a.range,
           semantic: a.semantic,
-          required: req.indexOf(k) >= 0
+          required: req.indexOf(k) >= 0,
+          preset: Object.prototype.hasOwnProperty.call(presets, k)
         };
       });
     }, [typeDef, attrMap]);
@@ -460,7 +477,15 @@
           <div class="form-row">
             <label>事件类型<span class="req">*</span>${typeDef && typeDef.min_trust !== undefined && html`<span class="dt">min_trust=${typeDef.min_trust}</span>`}</label>
             <div class="ctrl">
-              <select value=${typeName} onChange=${function (e) { setTypeName(e.target.value); }}>
+              <select value=${typeName} onChange=${function (e) {
+                const name = e.target.value;
+                setTypeName(name);
+                setVals(function (prev) {
+                  const n = Object.assign({}, prev);
+                  applyPresets(n, name);
+                  return n;
+                });
+              }}>
                 ${types.map(function (t) { return html`<option key=${t.type} value=${t.type}>${t.type}</option>`; })}
               </select>
               ${errs.type && html`<div class="field-err">${errs.type}</div>`}
@@ -496,6 +521,7 @@
           ${attrKeys.map(function (f) {
             return html`<div class="form-row" key=${f.name}>
               <label title=${f.semantic || ''}>${f.name}${f.required && html`<span class="req">*</span>`}
+                ${f.preset && html`<span class="dt" title="类型预置值:按钮语义自带,可改;写侧规则兜底">●</span>`}
                 <span class="dt">${f.datatype}${f.unit ? ' · ' + f.unit : ''}</span>
               </label>
               <${FieldControl} field=${f} value=${vals[f.name]} error=${errs[f.name]}

@@ -1595,6 +1595,102 @@ static void test_trust_tiers() {
 }
 
 // ============================================================================
+// 29. presets(固定写入值)全链路:注册校验 / 视图携带 / 写侧立法一致
+// ============================================================================
+static void test_event_type_presets() {
+    banner("29. presets(固定写入值)全链路");
+    Fixture f;
+
+    // -- ① 注册校验 --
+    // 正面:presets 合法 → 结算,条目读出且 to_json 携带
+    const mse::Receipt ok = f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "PresetOk"},          {"required_keys", {"id", "actor", "呼叫状态"}},
+         {"optional_keys", json::array()},{"rules", json::array()},
+         {"presets", {{"呼叫状态", "已响应"}}}});
+    CHECK(settled(ok));
+    const mse::EventTypeEntry* te = f.sys.defs().find_event_type("PresetOk");
+    CHECK(te != nullptr);
+    CHECK_EQ(te->presets.at("呼叫状态"), json("已响应"));
+    CHECK_EQ(json(*te).at("presets"), json::object({{"呼叫状态", "已响应"}}));
+
+    // 反面 1:presets 引用未登记键 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "PresetBadKey"},      {"required_keys", {"id", "actor"}},
+         {"optional_keys", json::array()},{"rules", json::array()},
+         {"presets", {{"幽灵键", "v"}}}})));
+    // 反面 2:presets 值超出键值域 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "PresetBadRange"},    {"required_keys", {"id", "actor", "呼叫状态"}},
+         {"optional_keys", json::array()},{"rules", json::array()},
+         {"presets", {{"呼叫状态", "不存在的状态"}}}})));
+    // 反面 3:presets 键不在 required/optional_keys 清单 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "PresetBadList"},     {"required_keys", {"id", "actor"}},
+         {"optional_keys", json::array()},{"rules", json::array()},
+         {"presets", {{"呼叫状态", "已响应"}}}})));
+    // 反面 4:presets 非 object → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "PresetBadShape"},    {"required_keys", {"id", "actor"}},
+         {"optional_keys", json::array()},{"rules", json::array()},
+         {"presets", json::array({"呼叫状态"})}})));
+
+    // -- ② 视图 buttons/actions 携带 presets --
+    CHECK(settled(post(f.sys, "MaterialCallRaised", "CALL-T1",
+                       {{"呼叫状态", "呼叫中"}, {"缺料工位", "工位02"}})));
+    const json view = f.sys.views().render("V-CALL-B6", mse::ViewParams{});
+    bool saw_answer_btn = false, saw_raise_btn = false;
+    for (const json& row : view["rows"]) {
+        for (const json& btn : row["buttons"]) {
+            if (btn["type"] == "MaterialCallAnswered") {
+                saw_answer_btn = true;
+                CHECK_EQ(btn["presets"], json::object({{"呼叫状态", "已响应"}}));
+                // 按钮可用性按 presets 求值:固定写入满足 R-CALL-ANSWER-VAL → enabled
+                CHECK(btn["enabled"].get<bool>());
+            } else if (btn["type"] == "MaterialCallRaised") {
+                saw_raise_btn = true;
+                CHECK_EQ(btn["presets"], json::object({{"呼叫状态", "呼叫中"}}));
+            }
+        }
+    }
+    CHECK(saw_answer_btn);
+    CHECK(saw_raise_btn);
+    for (const json& a : view["actions"]) CHECK(a.contains("presets"));
+    // 无 presets 的类型(如 MaterialVerified)也带空 object
+    const json pke = f.sys.views().render("V-PKE-B4", mse::ViewParams{});
+    bool saw_empty = false;
+    for (const json& a : pke["actions"]) {
+        if (a["type"] == "MaterialVerified") {
+            saw_empty = true;
+            CHECK(a.contains("presets"));
+            CHECK(a["presets"].is_object());
+            CHECK(a["presets"].empty());
+        }
+    }
+    CHECK(saw_empty);
+
+    // -- ③ R-CALL-ANSWER-VAL 写侧立法一致(L3) --
+    CHECK(settled(post(f.sys, "MaterialCallRaised", "CALL-T2",
+                       {{"呼叫状态", "呼叫中"}, {"缺料工位", "工位02"}})));
+    // 应答写成"已取消" → L3 拒;写成 presets 值"已响应" → 通过
+    CHECK(rejected_at(post(f.sys, "MaterialCallAnswered", "CALL-T2",
+                           {{"呼叫状态", "已取消"}}), 3));
+    CHECK(settled(post(f.sys, "MaterialCallAnswered", "CALL-T2",
+                       {{"呼叫状态", "已响应"}})));
+    // ANDON 通用呼叫同一立法
+    CHECK(settled(post(f.sys, "CallRaised", "总装线",
+                       {{"呼叫类型", "设备"}, {"呼叫状态", "呼叫中"}})));
+    CHECK(rejected_at(post(f.sys, "CallAcknowledged", "总装线",
+                           {{"呼叫状态", "呼叫中"}}), 3));
+    CHECK(settled(post(f.sys, "CallAcknowledged", "总装线",
+                       {{"呼叫状态", "已响应"}})));
+}
+
+// ============================================================================
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // 崩溃时也能看到已完成的段落
     std::puts("mse 红线测试(memory 后端)");
@@ -1625,6 +1721,7 @@ int main() {
     test_plc_noise_flood();
     test_async_settlement();
     test_trust_tiers();
+    test_event_type_presets();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
