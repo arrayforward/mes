@@ -441,8 +441,10 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     reg_type(defs, type_payload("OrderRevokeReversed", {"id", "actor"}, {"订单状态"}, {}, "", false));
     reg_type(defs, type_payload("OrderReReceived", {"id", "actor", "车型"},
                                 {"订单状态", "交付期", "计划产量"}, {}, "OrderRevokeReversed", false));
-    reg_type(defs, type_payload("OrderFreezeReversed", {"id", "actor", "冻结状态"}, {}, {}, "", false));
-    reg_type(defs, type_payload("OrderFrozen", {"id", "actor", "冻结状态"}, {}, {}, "OrderFreezeReversed", false));
+    reg_type(defs, type_payload("OrderFreezeReversed", {"id", "actor", "冻结状态"}, {}, {}, "", false,
+                                {{"冻结状态", "未冻结"}}));
+    reg_type(defs, type_payload("OrderFrozen", {"id", "actor", "冻结状态"}, {}, {}, "OrderFreezeReversed", false,
+                                {{"冻结状态", "已冻结"}}));
     reg_type(defs, type_payload("OrderCancelReversed", {"id", "actor", "订单状态"}, {}, {}, "", false));
     reg_type(defs, type_payload("OrderCancelled", {"id", "actor", "订单状态"}, {}, {}, "OrderCancelReversed", false));
     reg_type(defs, type_payload("OrderInsertReversed", {"id", "actor"}, {"序列号"}, {}, "", false));
