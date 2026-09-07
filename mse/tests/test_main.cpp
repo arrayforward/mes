@@ -1822,6 +1822,171 @@ static void test_button_options_and_flow_actions() {
 }
 
 // ============================================================================
+// 30. 视图级预置(emit_presets):注册校验 / 合并下发 / 覆盖同键 / options 试探
+// ============================================================================
+static void test_view_emit_presets() {
+    banner("30. 视图级预置 emit_presets 全链路");
+    Fixture f;
+
+    // 在指定视图的指定行上找某类型按钮(找不到 → null)
+    auto find_btn = [](const json& view, const std::string& row_id,
+                       const std::string& type) -> json {
+        for (const json& row : view["rows"]) {
+            if (!row_id.empty() && row["id"] != row_id) continue;
+            for (const json& btn : row["buttons"])
+                if (btn["type"] == type) return btn;
+        }
+        return json();
+    };
+    auto find_action = [](const json& view, const std::string& type) -> json {
+        for (const json& a : view["actions"])
+            if (a["type"] == type) return a;
+        return json();
+    };
+
+    // -- ① ViewRegistered 的 emit_presets 校验(沿用类型 presets 口径) --
+    auto view_payload = [](json ep) {
+        return json{{"view_id", "V-EP-T"},
+                    {"queries", {{"events", {"PullOrderCreated"}}, {"fold", "L1"}}},
+                    {"selects", {"拉动类型"}},
+                    {"rules", json::array()},
+                    {"emits", {"PullOrderCreated"}},
+                    {"render_mode", "终态"},
+                    {"emit_presets", std::move(ep)}};
+    };
+    // 正面:合法 → 结算,条目读出且 to_json 携带
+    CHECK(settled(f.sys.defs().settle_definition(
+        "ViewRegistered",
+        view_payload({{"PullOrderCreated", {{"拉动类型", "Kanban"}}}}))));
+    const mse::ViewEntry* ve = f.sys.defs().find_view("V-EP-T");
+    CHECK(ve != nullptr);
+    CHECK_EQ(ve->emit_presets.at("PullOrderCreated").at("拉动类型"), json("Kanban"));
+    CHECK_EQ(json(*ve).at("emit_presets"),
+             json::object({{"PullOrderCreated",
+                            json::object({{"拉动类型", "Kanban"}})}}));
+    // 反面 1:emit_presets 类型不在视图 emits 里 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered",
+        view_payload({{"PullOrderShipped", {{"拉动状态", "已发货"}}}}))));
+    // 反面 2:内层键未登记 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered", view_payload({{"PullOrderCreated", {{"幽灵键", "v"}}}}))));
+    // 反面 3:内层值越出键值域 → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered",
+        view_payload({{"PullOrderCreated", {{"拉动类型", "不存在"}}}}))));
+    // 反面 4:内层键未列入该类型 required/optional_keys → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered",
+        view_payload({{"PullOrderCreated", {{"呼叫状态", "呼叫中"}}}}))));
+    // 反面 5:emit_presets 非 object / 内层非 object → 拒
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered", view_payload(json::array({"PullOrderCreated"})))));
+    CHECK(!settled(f.sys.defs().settle_definition(
+        "ViewRegistered", view_payload({{"PullOrderCreated", "Kanban"}}))));
+    // 被拒候选不进定义日志:V-EP-T 仍是首版定义
+    CHECK_EQ(f.sys.defs().find_view("V-EP-T")->emit_presets.at("PullOrderCreated"),
+             json::object({{"拉动类型", "Kanban"}}));
+
+    // -- ② 种子视图下发:按钮/actions 的 presets = 类型 presets ∪ 视图级 emit_presets --
+    CHECK(settled(post(f.sys, "PullOrderCreated", "PO-EP-K",
+                       {{"拉动类型", "Kanban"}, {"拉动状态", "已创建"},
+                        {"物料编号", "MAT-1001"}},
+                       "logistics")));
+    CHECK(settled(post(f.sys, "PullOrderCreated", "PO-EP-J",
+                       {{"拉动类型", "JIS"}, {"拉动状态", "已创建"},
+                        {"物料编号", "MAT-1001"}},
+                       "logistics")));
+    const json b7 = f.sys.views().render("V-KANBAN-B7", mse::ViewParams{});
+    const json btn7 = find_btn(b7, "PO-EP-K", "PullOrderCreated");
+    CHECK(!btn7.is_null());
+    CHECK_EQ(btn7["presets"],
+             json::object({{"拉动状态", "已创建"}, {"拉动类型", "Kanban"}}));
+    CHECK_EQ(find_action(b7, "PullOrderCreated")["presets"], btn7["presets"]);
+    const json b9 = f.sys.views().render("V-JIS-B9", mse::ViewParams{});
+    const json btn9 = find_btn(b9, "PO-EP-J", "PullOrderCreated");
+    CHECK(!btn9.is_null());
+    CHECK_EQ(btn9["presets"].at("拉动类型"), json("JIS"));
+    CHECK_EQ(find_action(b9, "PullOrderCreated")["presets"].at("拉动类型"),
+             json("JIS"));
+    // emit_presets 只作用于声明的类型:同视图其余 emits 按钮不受影响
+    CHECK_EQ(find_btn(b7, "PO-EP-K", "PullOrderCancelled")["presets"],
+             json::object({{"拉动状态", "已取消"}}));
+
+    // -- ③ 类型 presets 与视图级合并、视图级覆盖同键 --
+    // PullOrderCancelled 类型 presets={"拉动状态":"已取消"};
+    // V-EP-OVR 视图级覆盖同键为"已收货"并加"拉动类型"
+    CHECK(settled(f.sys.defs().settle_definition(
+        "ViewRegistered",
+        {{"view_id", "V-EP-OVR"},
+         {"queries", {{"events", {"PullOrderCreated"}}, {"fold", "L1"}}},
+         {"selects", {"拉动类型"}},
+         {"rules", json::array()},
+         {"emits", {"PullOrderCancelled"}},
+         {"render_mode", "终态"},
+         {"emit_presets",
+          {{"PullOrderCancelled", {{"拉动状态", "已收货"}, {"拉动类型", "Kanban"}}}}}})));
+    const json ovr = f.sys.views().render("V-EP-OVR", mse::ViewParams{});
+    const json ovbtn = find_btn(ovr, "PO-EP-K", "PullOrderCancelled");
+    CHECK(!ovbtn.is_null());
+    CHECK_EQ(ovbtn["presets"],
+             json::object({{"拉动状态", "已收货"}, {"拉动类型", "Kanban"}}));
+    CHECK_EQ(find_action(ovr, "PullOrderCancelled")["presets"], ovbtn["presets"]);
+    // 只作用于本视图实例:B7 同类型按钮仍是类型 presets 原值
+    CHECK_EQ(find_btn(b7, "PO-EP-K", "PullOrderCancelled")["presets"],
+             json::object({{"拉动状态", "已取消"}}));
+
+    // -- ④ options 试探带视图级 presets --
+    // R-EP-GATE 看候选写入:拉动类型 != Kanban 即拒。GateProbe 试探 enum 键时,
+    // writes = 合并 presets ∪ {键:v} —— 视图级固定的拉动类型参与试探。
+    CHECK(settled(f.sys.defs().settle_definition(
+        "RuleRegistered",
+        {{"rule_id", "R-EP-GATE"},
+         {"deps", {"拉动类型"}},
+         {"effect", "filter"},
+         {"target_key", ""},
+         {"logic", json::parse(R"({"if":[{"==":[{"write":"拉动类型"},"Kanban"]},
+            {"pass":true},{"reject":"R-EP-GATE:仅 Kanban 可发起"}]})")},
+         {"consumers", "write"}})));
+    CHECK(settled(f.sys.defs().settle_definition(
+        "EventTypeRegistered",
+        {{"type", "GateProbe"},
+         {"required_keys", {"id", "actor", "拉动状态"}},
+         {"optional_keys", {"拉动类型"}},
+         {"rules", {"R-EP-GATE"}}})));
+    auto gate_view = [](const char* vid, bool with_ep) {
+        json p = {{"view_id", vid},
+                  {"queries", {{"events", {"PullOrderCreated"}}, {"fold", "L1"}}},
+                  {"selects", {"拉动类型"}},
+                  {"rules", json::array()},
+                  {"emits", {"GateProbe"}},
+                  {"render_mode", "终态"}};
+        if (with_ep)
+            p["emit_presets"] = {{"GateProbe", {{"拉动类型", "Kanban"}}}};
+        return p;
+    };
+    CHECK(settled(f.sys.defs().settle_definition("ViewRegistered",
+                                                 gate_view("V-EP-GW", true))));
+    CHECK(settled(f.sys.defs().settle_definition("ViewRegistered",
+                                                 gate_view("V-EP-GN", false))));
+    // 行上下文 PO-EP-J:本体当前 拉动类型=JIS,不带视图级 presets 时试探必被拒
+    const json gw = f.sys.views().render("V-EP-GW", mse::ViewParams{});
+    const json gwbtn = find_btn(gw, "PO-EP-J", "GateProbe");
+    CHECK(!gwbtn.is_null());
+    CHECK_EQ(gwbtn["presets"], json::object({{"拉动类型", "Kanban"}}));
+    CHECK(gwbtn["enabled"].get<bool>());
+    CHECK_EQ(gwbtn["options"].at("拉动状态"),
+             json::array({"已创建", "已发货", "已收货", "已取消"}));
+    // 无视图级 presets 的同型视图:同一行上 拉动状态 无合法值 → 按钮置灰
+    const json gn = f.sys.views().render("V-EP-GN", mse::ViewParams{});
+    const json gnbtn = find_btn(gn, "PO-EP-J", "GateProbe");
+    CHECK(!gnbtn.is_null());
+    CHECK(gnbtn["presets"].empty());
+    CHECK(!gnbtn["enabled"].get<bool>());
+    CHECK(gnbtn["options"].at("拉动状态").empty());
+}
+
+// ============================================================================
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // 崩溃时也能看到已完成的段落
     std::puts("mse 红线测试(memory 后端)");
@@ -1854,6 +2019,7 @@ int main() {
     test_trust_tiers();
     test_event_type_presets();
     test_button_options_and_flow_actions();
+    test_view_emit_presets();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

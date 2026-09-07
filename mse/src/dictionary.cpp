@@ -125,6 +125,7 @@ void to_json(json& j, const ViewEntry& e) {
         {"selects",     e.selects},
         {"rules",       e.rules},
         {"emits",       e.emits},
+        {"emit_presets", e.emit_presets},
         {"render_mode", e.render_mode},
         {"variants",    e.variants},
         {"status",      e.status},
@@ -142,6 +143,11 @@ void from_json(const json& j, ViewEntry& e) {
     j.at("rules").get_to(e.rules);
     j.at("emits").get_to(e.emits);
     e.render_mode = j.value("render_mode", std::string{"终态"});
+    e.emit_presets.clear();
+    if (j.contains("emit_presets") && j.at("emit_presets").is_object()) {
+        for (const auto& [t, pj] : j.at("emit_presets").items())
+            e.emit_presets.emplace(t, pj);
+    }
     e.variants.clear();
     if (j.contains("variants") && j.at("variants").is_object()) {
         for (const auto& [role, vj] : j.at("variants").items()) {
@@ -455,6 +461,13 @@ Receipt DefinitionLayer::settle_definition(const std::string& def_type, const js
         if (payload.contains("variants") && !payload.at("variants").is_object()) {
             violations.push_back("字段 variants 须为 object");
         }
+        if (payload.contains("emit_presets") &&
+            (!payload.at("emit_presets").is_object() ||
+             std::any_of(payload.at("emit_presets").begin(),
+                         payload.at("emit_presets").end(),
+                         [](const json& v) { return !v.is_object(); }))) {
+            violations.push_back("字段 emit_presets 须为 object,且每个类型的预置为 object");
+        }
         if (violations.empty()) {
             static const std::set<std::string> kRenderModes = {"终态", "流水", "拦截", "遍历"};
             if (kRenderModes.count(payload.at("render_mode").get<std::string>()) == 0) {
@@ -474,6 +487,44 @@ Receipt DefinitionLayer::settle_definition(const std::string& def_type, const js
             for (const auto& t : str_list(payload, "emits")) {
                 if (types_.count(t) == 0) {
                     violations.push_back("视图 emits 引用未注册事件类型: " + t);
+                }
+            }
+            // emit_presets(视图级预置):类型名须在 emits 里;内层键沿用类型 presets
+            // 校验口径——键已登记、值在该键值域内(range 非空时)、且在该类型的
+            // required/optional_keys 清单里(违规拒;视图级口径不得越出类型 schema)
+            if (payload.contains("emit_presets") && payload.at("emit_presets").is_object()) {
+                const std::set<std::string> emits_set = [&payload] {
+                    std::set<std::string> s;
+                    for (const auto& t : str_list(payload, "emits")) s.insert(t);
+                    return s;
+                }();
+                for (const auto& [t, pj] : payload.at("emit_presets").items()) {
+                    if (emits_set.count(t) == 0) {
+                        violations.push_back("emit_presets 类型不在视图 emits 里: " + t);
+                        continue;
+                    }
+                    if (!pj.is_object()) continue;  // 形状违规已在上面登记
+                    auto tit = types_.find(t);
+                    if (tit == types_.end()) continue;  // 未注册类型已在上面登记
+                    std::set<std::string> declared;
+                    for (const auto& k : tit->second.required_keys) declared.insert(k);
+                    for (const auto& k : tit->second.optional_keys) declared.insert(k);
+                    for (const auto& [k, v] : pj.items()) {
+                        auto ait = dict_.find(k);
+                        if (ait == dict_.end()) {
+                            violations.push_back("emit_presets 引用未登记键: " + k);
+                            continue;
+                        }
+                        if (declared.count(k) == 0) {
+                            violations.push_back(
+                                "emit_presets 键未列入该类型 required/optional_keys: " + k);
+                        }
+                        const auto& range = ait->second.range;
+                        if (!range.empty() &&
+                            std::find(range.begin(), range.end(), v) == range.end()) {
+                            violations.push_back("emit_presets 值超出键值域: " + k);
+                        }
+                    }
                 }
             }
             if (queries_ok) {

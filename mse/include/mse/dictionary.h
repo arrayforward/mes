@@ -89,6 +89,10 @@ struct ViewEntry {
     std::vector<std::string> selects;      // 键清单(字典引用;可跨本体、跨粒度)
     std::vector<std::string> rules;        // 规则引用(决定行/列/按钮,与写侧同一份)
     std::vector<std::string> emits;        // 可发起事件类型(②的子集引用)
+    std::map<std::string, json> emit_presets;  // 视图级预置:emits 类型的口径差异
+                                           // (如 V-KANBAN-B7 的 PullOrderCreated 固定
+                                           // {"拉动类型":"Kanban"});与类型 presets 合并
+                                           // (视图级优先)后随按钮下发、参与 options 试探
     std::string render_mode = "终态";      // "终态" | "流水" | "拦截" | "遍历"
                                            // 遍历:以 params.entity 为起点沿 ref 键(关系即属性)
                                            // 与 corrects 因果边双向游走,输出节点/边图(追溯视图)

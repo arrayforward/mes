@@ -684,7 +684,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"rules", {"R-VIEW-CALL"}},
         {"emits", {"MaterialCallRaised", "MaterialCallAnswered", "MaterialCallCancelled"}},
         {"render_mode", "终态"}});
-    // B7-B10 四类拉动单视图(终态;同一事件集,读侧规则各出本类型的行)。
+    // B7-B10 四类拉动单视图(终态;同一事件集,读侧规则各出本类型的行;
+    // 视图级 emit_presets 把发起 PullOrderCreated 的拉动类型固定为本视图口径)。
     reg_view(defs, {
         {"view_id", "V-KANBAN-B7"},
         {"queries", {{"events", {"PullOrderCreated", "PullOrderShipped", "PullOrderReceived",
@@ -693,6 +694,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"selects", {"拉动类型", "拉动状态", "物料编号"}},
         {"rules", {"R-VIEW-KANBAN"}},
         {"emits", {"PullOrderCreated", "PullOrderShipped", "PullOrderReceived", "PullOrderCancelled"}},
+        {"emit_presets", {{"PullOrderCreated", {{"拉动类型", "Kanban"}}}}},
         {"render_mode", "终态"}});
     reg_view(defs, {
         {"view_id", "V-PULL-B8"},
@@ -702,6 +704,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"selects", {"拉动类型", "拉动状态", "物料编号"}},
         {"rules", {"R-VIEW-PULL"}},
         {"emits", {"PullOrderCreated", "PullOrderShipped", "PullOrderReceived", "PullOrderCancelled"}},
+        {"emit_presets", {{"PullOrderCreated", {{"拉动类型", "紧急"}}}}},
         {"render_mode", "终态"}});
     reg_view(defs, {
         {"view_id", "V-JIS-B9"},
@@ -711,6 +714,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"selects", {"拉动类型", "拉动状态", "物料编号"}},
         {"rules", {"R-VIEW-JIS"}},
         {"emits", {"PullOrderCreated", "PullOrderShipped", "PullOrderReceived", "PullOrderCancelled"}},
+        {"emit_presets", {{"PullOrderCreated", {{"拉动类型", "JIS"}}}}},
         {"render_mode", "终态"}});
     reg_view(defs, {
         {"view_id", "V-JIT-B10"},
@@ -720,6 +724,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"selects", {"拉动类型", "拉动状态", "物料编号"}},
         {"rules", {"R-VIEW-JIT"}},
         {"emits", {"PullOrderCreated", "PullOrderShipped", "PullOrderReceived", "PullOrderCancelled"}},
+        {"emit_presets", {{"PullOrderCreated", {{"拉动类型", "JIT"}}}}},
         {"render_mode", "终态"}});
     // B11 线边库库存(终态·时空切片:线边库)。
     reg_view(defs, {

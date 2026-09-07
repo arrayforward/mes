@@ -43,21 +43,34 @@ namespace {
 // 遍历视图的 BFS 深度(ViewParams 无深度字段,固定 3)
 constexpr int kTraversalDepth = 3;
 
+// 视图级预置并入类型 presets:合并 = 类型 presets ∪ emit_presets[type],
+// 视图级覆盖同键;只作用于本视图实例(类型注册表本身不变)。
+json merged_presets(const ViewEntry& view, const std::string& type,
+                    const EventTypeEntry* te) {
+    json presets = te ? te->presets : json::object();
+    const auto it = view.emit_presets.find(type);
+    if (it != view.emit_presets.end() && it->second.is_object()) {
+        for (const auto& [k, v] : it->second.items()) presets[k] = v;
+    }
+    return presets;
+}
+
 // ---- 按钮合法选项(options)试探 ----
 // 对某事件类型的 enum 键(字典 range 非空,有限值域;整数/浮点无限域不做),
 // 逐值构造合成候选 writes{target: presets ∪ {键:v}},走与按钮 enabled 判定
 // 完全相同的 eval_filters 路径;通过的 v 按值域声明序进 options[键]。
 // 该类型无 enum 键或多目标(无单一上下文)→ 返回空 object;
 // presets 值必含于 options(presets 是写入的一部分,缺则按值域序并入)。
+// presets 调用方传入(类型 presets 与视图级 emit_presets 的合并结果),
+// 试探口径与按钮真实会带的写入一致。
 json probe_options(const DefinitionLayer& defs, RuleEngine& rules,
-                   const EventTypeEntry* te,
+                   const EventTypeEntry* te, const json& presets,
                    const std::map<std::string, json>& attrs_per_target,
                    const std::string& target_id) {
     json options = json::object();
     if (te == nullptr || te->multi_target) return options;
     std::vector<std::string> keys = te->required_keys;
     keys.insert(keys.end(), te->optional_keys.begin(), te->optional_keys.end());
-    const json& presets = te->presets;
     for (const std::string& key : keys) {
         const AttributeEntry* attr = defs.find_attr(key);
         if (!attr || attr->datatype != "enum" || attr->range.empty()) continue;
@@ -310,20 +323,21 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
             // 行级按钮:每个 emit 类型求其 rules 引用的 filter 规则(与写侧 L3 同一份)。
             // 按钮可用性按"该类型的语义动作自带写入(presets)"求值:固定写入值并入
             // 合成候选的变化集,写值类 filter 规则(如 R-CALL-ANSWER-VAL)看到的即
-            // 按钮真实会带的写入;按钮输出携带 presets 供表单预填(空 object 也带)。
+            // 按钮真实会带的写入;presets = 类型 presets ∪ 视图级 emit_presets
+            // (视图级覆盖同键),按钮输出携带合并结果供表单预填(空 object 也带)。
             json buttons = json::array();
             for (const std::string& t : emits) {
                 const EventTypeEntry* te = defs_.find_event_type(t);
-                const json presets = te ? te->presets : json::object();
+                const json presets = merged_presets(*view, t, te);
                 const std::vector<std::string> refs =
                     te ? te->rules : std::vector<std::string>{};
                 cand.writes[id] = presets;
                 std::vector<std::string> reasons =
                     rules_.eval_filters(refs, defs_.rules(), attrs_per_target, cand);
                 // 合法选项:对每个 enum 键逐值试探(与 enabled 同一 eval_filters
-                // 路径);无 enum 键/多目标类型 → 空 object
+                // 路径,试探带合并后 presets);无 enum 键/多目标类型 → 空 object
                 const json options =
-                    probe_options(defs_, rules_, te, attrs_per_target, id);
+                    probe_options(defs_, rules_, te, presets, attrs_per_target, id);
                 // enabled 口径:有试探键(enum 写入)时,enabled ⟺ 每个试探键都
                 // 存在合法值(存在性语义——"界面上能点的 ⇔ 系统能结算的";
                 // 空写入求值对"值待用户从 options 选"的按钮会误灰);
@@ -381,7 +395,7 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
                 json buttons = json::array();
                 for (const std::string& t : emits) {
                     const EventTypeEntry* te = defs_.find_event_type(t);
-                    const json presets = te ? te->presets : json::object();
+                    const json presets = merged_presets(*view, t, te);
                     const std::vector<std::string> refs =
                         te ? te->rules : std::vector<std::string>{};
                     Candidate cand;
@@ -391,7 +405,7 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
                         cand.corrects = e.event_id;  // 试探候选保持真实形状
                     std::vector<std::string> reasons =
                         rules_.eval_filters(refs, defs_.rules(), attrs_per_target, cand);
-                    json options = probe_options(defs_, rules_, te,
+                    json options = probe_options(defs_, rules_, te, presets,
                                                  attrs_per_target, target);
                     // enabled 口径与终态行一致:有试探键时按存在性(每键有合法值)
                     bool enabled = reasons.empty();
@@ -451,7 +465,8 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
         out["rejections"] = std::move(rejections);
     }
 
-    // 视图级 actions:仅列可发起类型(行级可用性在 buttons);presets 随动作携带。
+    // 视图级 actions:仅列可发起类型(行级可用性在 buttons);presets 随动作携带
+    // (类型 presets ∪ 视图级 emit_presets,视图级覆盖同键)。
     // options 无行上下文可试探,取 enum 键的字典声明值域全量(声明序);
     // 无 enum 键/多目标类型 → 空 object。
     json actions = json::array();
@@ -470,7 +485,7 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
             }
         }
         actions.push_back({{"type", t},
-                           {"presets", te ? te->presets : json::object()},
+                           {"presets", merged_presets(*view, t, te)},
                            {"options", std::move(options)}});
     }
     out["actions"] = std::move(actions);

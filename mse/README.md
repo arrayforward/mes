@@ -271,6 +271,12 @@ sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 
   键须列入 required/optional_keys。视图按钮与顶层 actions 携带 presets 供表单
   预填;按钮可用性按 presets 并入合成候选求值。写侧如需强制一致,照
   `R-CALL-ANSWER-VAL` 立法(filter 规则挂到类型 rules,种子仅对呼叫两类示范)。
+- **emit_presets(视图级预置)**:视图注册表条目可声明 `emit_presets{type:{键:值}}`
+  ——同一事件类型在不同视图里的口径差异(如 V-KANBAN-B7/V-PULL-B8/V-JIS-B9/
+  V-JIT-B10 同发 `PullOrderCreated`,但拉动类型分别固定为 Kanban/紧急/JIS/JIT)。
+  注册校验沿用类型 presets 口径,另要求类型名列在视图 emits 里。下发 =
+  类型 presets ∪ emit_presets[type](视图级覆盖同键,只作用于本视图实例),
+  行按钮/流水行按钮/顶层 actions 的 presets 与 options 试探全部用合并结果。
 
 ## P4:适配层 / 异步结算 / 信任分级
 
