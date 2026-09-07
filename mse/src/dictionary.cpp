@@ -584,6 +584,11 @@ std::vector<std::string> DefinitionLayer::event_type_names() const {
 const std::map<std::string, Rule>& DefinitionLayer::rules() const { return rules_; }
 const std::map<std::string, AnchorEntry>& DefinitionLayer::anchors() const { return anchors_; }
 
+// ---- 全量只读枚举(自省/工具端点用;只读引用,与 rules()/anchors() 同款约定) ----
+const std::map<std::string, AttributeEntry>& DefinitionLayer::attrs_all() const { return dict_; }
+const std::map<std::string, EventTypeEntry>& DefinitionLayer::types_all() const { return types_; }
+const std::map<std::string, ViewEntry>& DefinitionLayer::views_all() const { return views_; }
+
 DefVersions DefinitionLayer::versions() const { return versions_; }
 
 bool DefinitionLayer::is_registered_key(const std::string& key) const {

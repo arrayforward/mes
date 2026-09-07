@@ -121,6 +121,15 @@ target_compile_definitions(mse_demo PRIVATE
     MSE_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
     KNOWLEDGE_ASSETS_DIR="${MSE_KNOWLEDGE_DIR}/assets")
 
+# ---- 人工验证用 HTTP 服务器(只读自省端点 + 静态资源) ----
+add_executable(mse_server server/main.cpp)
+target_link_libraries(mse_server PRIVATE mse)
+target_compile_options(mse_server PRIVATE -Wall -Wextra)
+target_link_options(mse_server PRIVATE ${MSE_STATIC_RUNTIME})
+target_compile_definitions(mse_server PRIVATE
+    MSE_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    MSE_WEB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/web")
+
 # ---- 测试 ----
 add_executable(mse_tests tests/test_main.cpp)
 target_link_libraries(mse_tests PRIVATE mse)

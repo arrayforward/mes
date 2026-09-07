@@ -158,6 +158,14 @@ public:
     /// 锚点表(按路径字典序)。
     const std::map<std::string, AnchorEntry>& anchors() const;
 
+    // ---- 全量只读枚举(自省/工具端点用;只读引用,不改内部状态) ----
+    /// 属性字典全量(键 → 条目,含 deprecated)。
+    const std::map<std::string, AttributeEntry>& attrs_all() const;
+    /// 事件类型注册表全量(类型名 → 条目,含 deprecated)。
+    const std::map<std::string, EventTypeEntry>& types_all() const;
+    /// 视图注册表全量(view_id → 条目,含 deprecated)。
+    const std::map<std::string, ViewEntry>& views_all() const;
+
     DefVersions versions() const;
 
     /// 键是否已登记且 active。

@@ -43,7 +43,10 @@ mse/
 ├── include/mse/         全部公开头文件(契约先行)
 ├── src/                 17 个实现文件(见下表)
 ├── assets/              knowledge 协助用种子(制造域本体 + 词典)+ wasm/ 预烘焙规则产物
-├── demo/sim_auto_flow.cpp   整车厂总装车间的一天:端到端综合流程(交付演示)
+├── demo/sim_auto_flow.cpp   整车厂总装车间的一天:端到端综合流程(交付演示;
+│                            `--server host:port` 切换为纯 HTTP 客户端模式打 mse_server)
+├── server/main.cpp          mse_server:人工验证用长驻 HTTP 服务器(自省端点 + 静态托管)
+├── web/                     免构建 H5 验证台(React 18 UMD + htm,vendor 本地化)
 ├── tests/test_main.cpp      红线测试(极简自带框架,466 项断言)
 └── CMakeLists.txt       引入兄弟模块(knowledge/geocore/entity/voxel→storage)+ wasm3
 ```
@@ -69,6 +72,8 @@ mse/
 | `src/seeds.cpp` | 种子定义:系统键 + 整车厂业务全覆盖(46 视图的机制实例化,216 条定义全结算;含 PLC 迁移沿类型) | 视图提取文档(46 视图) |
 | `src/seeds_wasm.cpp` | WASM 种子规则:读 assets/wasm 预烘焙产物,经同一条 settle_definition 注册 | 实现方案 §3.3 |
 | `src/system.cpp` | 系统装配:构造即完成定义加载、日志重放、投影(快照加速)与时空重建 | 实现方案 §一 |
+| `server/main.cpp` | mse_server:人工验证长驻 HTTP 服务器——两个动词 + /meta/* 只读自省 + web/ 静态托管 + X-MSE-Token 信任分级;种子含 SequenceAdjusted 的 WASM 规则接入 | 实现方案 §3.8 |
+| `web/`(index.html / app.js / vendor) | 免构建 H5 验证台:视图菜单(A–H 分组)、四种渲染模式、事件表单(字典驱动)、拦截卡片、事件流侧栏、AS OF t | API 文档 §八(视图即数据,前端无业务逻辑) |
 
 ## 构建与测试
 
@@ -77,6 +82,7 @@ cmake -S mse -B mse/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build mse/build -j
 ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
 ./mse/build/mse_demo        # 汽车生产短流程端到端模拟(生成 mse_demo.db)
+./mse/build/mse_server --port 18080   # 人工验证服务器(H5 见下节)
 ```
 
 - `mse_tests`:27 组红线测试(memory 后端,466 项断言)——重放逐比特一致、
@@ -129,10 +135,44 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
                       "reasons":["R-PLAN-ADJUST:...05 绝对禁止调整"]}]}]}
 ```
 
+## 人工验证 H5(mse_server + web/)
+
+`mse_server` 把内核装配成长驻 HTTP 服务:两个动词 + 只读自省端点 + 静态托管
+`web/` 验证台(React 18 UMD + htm,免构建,vendor 已本地化,离线可用)。
+
+```bash
+./mse/build/mse_server --port 18080     # 空库自动装种子(216 条定义 + WASM 规则接入)
+# 浏览器打开 http://127.0.0.1:18080/
+```
+
+- **菜单组织**:左侧视图列表按视图号尾字母分 A–H 八组(A 计划 / B 物料 / C AVI /
+  D ANDON / E PMC / F 质量 / G 设备 / H 集成);尾号非字母的(如 V-REWORK-001)归"其他"。
+- **凭证**:顶栏"凭证"输入框即 `X-MSE-Token`:`ui-token`(L2,默认,存 localStorage)、
+  `plc-gw-token`(L1)、`erp-token`(L1);不带/错凭证 trust=0——`PlcEdgeReported`
+  (min_trust=1)会被 L2 拒,可现场演示信任分级。
+- **发起事件**:"+ 发起事件"按事件类型注册表自动生成表单(系统键 + 属性键;
+  enum 下拉/值域/单位/必填全部来自属性字典);回执三态:settled(落账 event_id)、
+  rejected(layer + violations 红框展示)、accepted(异步悬态,点"落账"触发
+  POST /drain 后进日志)。
+- **拦截反馈**:拦截视图(V-PKE-B4、V-DEFECT-F10)把 RejectionLog 渲染为
+  分层着色卡片(L0 格式 / L1 字典 / L2 信任 / L3 规则),附候选原文。
+- **观察者 / 实体 / AS OF**:观察者下拉来自当前视图的 variants;entity 喂遍历与
+  纵切视图(节点可点击继续游走);AS OF t 对所有视图做时间回溯。
+- **端到端驱动**:`./mse/build/mse_demo --server 127.0.0.1:18080` —— 九节场景
+  全部经真实 HTTP 打该服务器(客户端模式:不构造 System、不装种子;entity 桥 /
+  knowledge / 投影哈希 / 崩溃恢复等进程内小节自动跳过,收尾改用 /meta/events
+  事件总数、拦截视图 rejections、幂等键重放、AS OF 对比验证)。
+
+服务端点一览:`POST /events`、`GET /views/{id}`、`POST /drain`、
+`GET /meta/views|event-types|attributes|anchors|ontologies|events`;
+`GET /` 与任意非 API 路径按 web/ 根静态文件处理(防 `..` 穿越,未命中 404)。
+
 ## demo 场景(sim_auto_flow):整车厂总装车间的一天
 
 sqlite 后端 + voxelstore 时空持久化 + 全量业务种子 + WASM 种子 + 定距快照(间隔 20),
-102 条事件全程真实 HTTP 驱动(PLC 适配层小节走进程内适配器入口),九节:
+102 条事件全程真实 HTTP 驱动(PLC 适配层小节走进程内适配器入口),九节。
+`--server host:port` 切换为纯客户端模式:不构造 System、全部动作打外部 mse_server,
+进程内能力小节(entity 桥/快照/哈希重放/崩溃恢复)跳过,收尾走 HTTP 可观测验证:
 
 1. **开班**:ERP 订单经 `InboundMessageRecorded` 进系统 → `OrderReceived`×3 +
    产线计划基线 → A2 排序定序列号、`OrderSwapped` 换单 → `OrderFrozen` 冻结一单 →

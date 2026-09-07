@@ -11,15 +11,25 @@
 //     AS OF t、定距快照、幂等键、崩溃恢复、重放逐比特一致;
 //   · AI 不碰状态:knowledge 建议照样过四层校验;RFID 观测流经 entity 浮现本体。
 //
+// 用法:
+//   mse_demo                       独立模式:自带 System + 内嵌 HTTP 服务器(默认)
+//   mse_demo --server host:port    客户端模式:不构造 System/不装种子/不嵌服务器,
+//                                  全部业务动作经真实 HTTP 打外部 mse_server;
+//                                  进程内能力小节(entity 桥/knowledge/投影哈希/
+//                                  崩溃恢复)跳过,收尾改用 HTTP 可观测验证。
+//
 // 退出码:0 = 全部关键环节符合预期;非 0 = 有红线被打破。
 // ============================================================================
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,7 +63,28 @@ static void section(const char* title) {
 }
 
 // ---- HTTP 驱动辅助 ----
-static uint16_t g_port = 0;
+static uint16_t    g_port = 0;
+static std::string g_host = "127.0.0.1";
+static bool        g_server_mode = false;      // --server:打外部 mse_server
+static mse::System* g_sys = nullptr;           // 独立模式下的进程内系统(服务器模式为空)
+
+// 百分号编码(非 unreserved 字节一律 %XX;中文角色名/锚点 query 值必须编码)
+static std::string url_encode(const std::string& s) {
+    static const char* kHex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(s.size());
+    for (const unsigned char c : s) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+            c == '-' || c == '_' || c == '.' || c == '~')
+            out += static_cast<char>(c);
+        else {
+            out += '%';
+            out += kHex[c >> 4];
+            out += kHex[c & 15];
+        }
+    }
+    return out;
+}
 
 // POST /events 并打印类型与回执(拦截的打印 violations);返回回执 JSON。
 // token 非空时携带 X-MSE-Token 凭证头(信任分级:凭证 → 信任级)。
@@ -63,7 +94,7 @@ static json post_event(const json& payload, const std::string& note = "",
         token.empty() ? std::map<std::string, std::string>{}
                       : std::map<std::string, std::string>{{"X-MSE-Token", token}};
     const auto [status, body] =
-        mse::http_request("127.0.0.1", g_port, "POST", "/events", payload.dump(), headers);
+        mse::http_request(g_host, g_port, "POST", "/events", payload.dump(), headers);
     const json r = json::parse(body, nullptr, false);
     const std::string type = payload.value("type", "?");
     if (status == 200 && r.is_object() && r.value("status", "") == "settled") {
@@ -88,9 +119,85 @@ static bool accepted(const json& receipt) {
 
 static json get_view(const std::string& path_with_query) {
     const auto [status, body] =
-        mse::http_request("127.0.0.1", g_port, "GET", path_with_query);
+        mse::http_request(g_host, g_port, "GET", path_with_query);
     if (status != 200) std::printf("  GET %s → HTTP %d\n", path_with_query.c_str(), status);
     return json::parse(body, nullptr, false);
+}
+
+// ---- 双模式读取辅助:独立模式读进程内 sys,服务器模式走 /meta/* 只读端点 ----
+
+// 已结算事件(按类型过滤,时间序)。服务器模式经 /meta/events(上限 500 条,
+// 演示规模 ~107 条,够用);返回统一的 Event JSON 形态。
+static std::vector<json> events_of_type(const std::string& type) {
+    std::vector<json> out;
+    if (g_server_mode) {
+        const json arr = get_view("/meta/events?limit=500");  // 新的在前
+        for (const json& e : arr)
+            if (e.is_object() && e.value("type", "") == type) out.push_back(e);
+        std::reverse(out.begin(), out.end());  // 还原时间序
+    } else {
+        for (const mse::Event& e : g_sys->log().events_of_type(type)) out.push_back(e);
+    }
+    return out;
+}
+
+static size_t count_settled(const std::string& type) { return events_of_type(type).size(); }
+
+// 修正链:指向 event_id 的修正事件条数
+static size_t count_corrections(int64_t event_id) {
+    if (g_server_mode) {
+        size_t n = 0;
+        for (const json& e : get_view("/meta/events?limit=500"))
+            if (e.is_object() && e.contains("corrects") && e["corrects"].is_number() &&
+                e["corrects"].get<int64_t>() == event_id)
+                ++n;
+        return n;
+    }
+    return g_sys->log().corrections_of(event_id).size();
+}
+
+// 异步落账:服务器模式 POST /drain,独立模式进程内 drain_async
+static size_t drain_async() {
+    if (g_server_mode) {
+        const auto [status, body] = mse::http_request(g_host, g_port, "POST", "/drain");
+        const json r = json::parse(body, nullptr, false);
+        if (status != 200 || !r.is_object()) {
+            std::printf("  POST /drain → HTTP %d\n", status);
+            return 0;
+        }
+        return r.value("drained", static_cast<size_t>(0));
+    }
+    return g_sys->pipeline().drain_async();
+}
+
+// 终态视图取行(服务器模式下读投影终态的 HTTP 通道);找不到返回 null
+static json view_row(const std::string& view_id, const std::string& row_id) {
+    const json v = get_view("/views/" + view_id);
+    if (v.is_object() && v.contains("rows"))
+        for (const json& r : v["rows"])
+            if (r.value("id", "") == row_id) return r;
+    return json();
+}
+
+// 进程内投影不可达时的替代佐证:某类型事件流中对 (id,key) 的最后一次写入
+static std::string last_write_of(const std::string& type, const std::string& id,
+                                 const std::string& key) {
+    std::string out;
+    for (const json& e : events_of_type(type))
+        if (e.contains("writes") && e["writes"].is_object() && e["writes"].contains(id) &&
+            e["writes"][id].is_object() && e["writes"][id].contains(key) &&
+            e["writes"][id][key].is_string())
+            out = e["writes"][id][key].get<std::string>();
+    return out;
+}
+
+// 适配层候选 → POST /events 扁平载荷(服务器模式:候选只能经 HTTP 提交)
+static json candidate_payload(const mse::Candidate& c) {
+    json p = {{"type", c.type}, {"actor", c.actor}, {"writes", c.writes}};
+    if (!c.occur_time.empty()) p["time"] = c.occur_time;
+    if (c.space.kind == mse::SpaceRef::Kind::kAnchor && !c.space.anchor.empty())
+        p["space"] = {{"anchor", c.space.anchor}};
+    return p;
 }
 
 static bool settled(const json& receipt) {
@@ -220,19 +327,67 @@ static void print_view_digest(const json& v) {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
+    // ---- 命令行:--server host:port 进入客户端模式(打外部 mse_server) ----
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--server" && i + 1 < argc) {
+            const std::string hp = argv[++i];
+            const size_t colon = hp.rfind(':');
+            if (colon == std::string::npos || colon == 0 || colon + 1 >= hp.size()) {
+                std::fprintf(stderr, "--server 参数须为 host:port(收到 %s)\n", hp.c_str());
+                return 2;
+            }
+            g_host = hp.substr(0, colon);
+            g_port = static_cast<uint16_t>(std::atoi(hp.substr(colon + 1).c_str()));
+            g_server_mode = true;
+        } else {
+            std::fprintf(stderr, "用法:%s [--server host:port]\n", argv[0]);
+            return 2;
+        }
+    }
+
+    // 独立模式的进程内装配(客户端模式保持空;生命周期覆盖全部小节)
+    std::unique_ptr<storage::SqliteBackend>       backend_;
+    std::unique_ptr<voxelstore::RecordVoxelStore> voxel_store_;
+    std::unique_ptr<mse::System>                  sys_;
+    std::unique_ptr<mse::SnapshotStore>           snapshots_;
+    std::unique_ptr<mse::HttpServer>              server_;
+
+    if (g_server_mode) {
+        // ====================================================================
+        section("0. 开班前:连接外部 mse_server(客户端模式,不构造 System)");
+        // ====================================================================
+        // 客户端模式不装种子、不嵌服务器:世界由服务器侧装配。这里只做连通性
+        // 与"全新库"确认——后续小节的计数类断言都基于从空白世界开始。
+        std::printf("  目标服务器:%s:%d(POST /events,GET /views/{id},/meta/*,POST /drain)\n",
+                    g_host.c_str(), g_port);
+        const json views_meta = get_view("/meta/views");
+        DEMO_CHECK(views_meta.is_array() && views_meta.size() >= 44,
+                   "服务器视图定义缺失(mse_server 未装种子?)");
+        std::printf("  服务器视图定义:%zu 个\n",
+                    views_meta.is_array() ? views_meta.size() : 0);
+        const json ev0 = get_view("/meta/events?limit=500");
+        DEMO_CHECK(ev0.is_array() && ev0.empty(),
+                   "服务器事件日志非空(--server 演示需要全新 db)");
+        std::printf("  事件日志:%zu 条(全新库)\n", ev0.is_array() ? ev0.size() : 0);
+        std::printf("  进程内能力小节将跳过(entity 演化桥/knowledge 协助/投影哈希/崩溃恢复)"
+                    ":服务器侧能力,见独立模式\n");
+    } else {
     // ========================================================================
     section("0. 开班前:sqlite + voxel 持久化 + 种子定义 + WASM 规则 + HTTP 服务");
     // ========================================================================
     std::filesystem::remove("mse_demo.db");         // 每次演示从空白世界开始
     std::filesystem::remove("mse_demo_voxels.db");
 
-    storage::SqliteBackend backend("mse_demo.db");  // storage 是唯一持久化接口
+    backend_ = std::make_unique<storage::SqliteBackend>("mse_demo.db");  // storage 是唯一持久化接口
     auto voxel_backend = std::make_unique<storage::SqliteBackend>("mse_demo_voxels.db");
-    voxelstore::RecordVoxelStore voxel_store(std::move(voxel_backend));
-    mse::System sys(backend, &voxel_store);
+    voxel_store_ = std::make_unique<voxelstore::RecordVoxelStore>(std::move(voxel_backend));
+    sys_ = std::make_unique<mse::System>(*backend_, voxel_store_.get());
+    mse::System& sys = *sys_;
+    g_sys = &sys;
 
     mse::load_system_keys(sys.defs());        // 一切皆属性:系统键先登记
     mse::load_auto_plant_seeds(sys.defs());   // 编词典、立行为、立法、开窗口(46 视图)
@@ -254,8 +409,8 @@ int main() {
     std::printf("  SequenceAdjusted 规则族:R-PLAN-ADJUST + R-SEQ-FROZEN + R-PLAN-ADJUST-WASM\n");
 
     // 定距快照:每 20 条已结算事件落一份投影快照(AS OF 加速 + 崩溃恢复基座)
-    mse::SnapshotStore snapshots(backend);
-    sys.pipeline().set_snapshots(&snapshots, 20);
+    snapshots_ = std::make_unique<mse::SnapshotStore>(*backend_);
+    sys.pipeline().set_snapshots(snapshots_.get(), 20);
 
     std::printf("  定义层就绪:属性 %zu 键,事件类型 %zu 个,规则 %zu 条,锚点 %zu 个\n",
                 sys.defs().attr_keys().size(), sys.defs().event_type_names().size(),
@@ -265,8 +420,8 @@ int main() {
     // 信任分级:凭证 → 信任级(HTTP 头 X-MSE-Token 查表;未携带/未登记 → 0)
     sys.api().set_trust_tokens({{"plc-gw-01", 1}, {"mes-admin", 3}});
 
-    mse::HttpServer server;
-    const bool listening = server.listen_on("127.0.0.1", 0, [&sys](const mse::HttpRequest& req) {
+    server_ = std::make_unique<mse::HttpServer>();
+    const bool listening = server_->listen_on("127.0.0.1", 0, [&sys](const mse::HttpRequest& req) {
         if (req.method == "POST" && req.path == "/events") {
             const json payload = json::parse(req.body, nullptr, false);
             if (payload.is_discarded())
@@ -287,9 +442,13 @@ int main() {
                                  "{\"error\":\"not found\"}"};
     });
     DEMO_CHECK(listening, "HTTP 服务监听失败");
-    g_port = server.port();
+    g_port = server_->port();
     std::printf("  HTTP 服务:127.0.0.1:%d(POST /events,GET /views/{id},其余 404)\n",
                 g_port);
+    }  // ---- 独立模式装配结束 ----
+
+    // PLC 网关凭证:两模式信任登记表不同(独立模式本地登记,服务器模式查服务器侧)
+    const std::string kPlcToken = g_server_mode ? "plc-gw-token" : "plc-gw-01";
 
     const char* kWS = "整车厂/总装车间";  // 时空切片锚点(车间)
     (void)kWS;
@@ -516,23 +675,33 @@ int main() {
                                             : "");
         DEMO_CHECK(settled(r), "故障报警未结算");
         if (i == 3) {
-            const json attrs = sys.projection().attrs_of("EQ-NG01");
-            DEMO_CHECK(attrs.value("同检点故障计数", 0) == 3, "同检点计数 derive 未到 3");
-            const auto alarms = sys.log().events_of_type("AlarmEscalated");
+            if (g_server_mode) {
+                // 投影是进程内能力:HTTP 侧以结算计数佐证(derive 计数由报警触发佐证)
+                DEMO_CHECK(count_settled("FaultAlarmed") == 3, "同检点故障应已结算 3 条");
+            } else {
+                const json attrs = g_sys->projection().attrs_of("EQ-NG01");
+                DEMO_CHECK(attrs.value("同检点故障计数", 0) == 3, "同检点计数 derive 未到 3");
+            }
+            const auto alarms = events_of_type("AlarmEscalated");
             DEMO_CHECK(alarms.size() == 1, "第 3 次应触发 1 条科长预警");
             if (!alarms.empty())
-                DEMO_CHECK(alarms[0].writes.at("EQ-NG01").at("报警级别") == "科长",
+                DEMO_CHECK(alarms[0]["writes"]["EQ-NG01"]["报警级别"] == "科长",
                            "第 3 次预警级别应为科长");
         }
     }
     {
-        const json attrs = sys.projection().attrs_of("EQ-NG01");
-        std::printf("  EQ-NG01 同检点故障计数 = %s(derive R-ALM-COUNT,null→0 起步)\n",
-                    attrs["同检点故障计数"].dump().c_str());
-        DEMO_CHECK(attrs.value("同检点故障计数", 0) == 10, "同检点计数 derive 未到 10");
+        if (g_server_mode) {
+            DEMO_CHECK(count_settled("FaultAlarmed") == 10, "同检点故障应已结算 10 条");
+            std::printf("  EQ-NG01 同检点故障结算 10 条(derive 计数由逐级报警佐证)\n");
+        } else {
+            const json attrs = g_sys->projection().attrs_of("EQ-NG01");
+            std::printf("  EQ-NG01 同检点故障计数 = %s(derive R-ALM-COUNT,null→0 起步)\n",
+                        attrs["同检点故障计数"].dump().c_str());
+            DEMO_CHECK(attrs.value("同检点故障计数", 0) == 10, "同检点计数 derive 未到 10");
+        }
         bool saw_minister = false;
-        for (const mse::Event& e : sys.log().events_of_type("AlarmEscalated"))
-            if (e.writes.at("EQ-NG01").at("报警级别") == "部长") saw_minister = true;
+        for (const json& e : events_of_type("AlarmEscalated"))
+            if (e["writes"]["EQ-NG01"]["报警级别"] == "部长") saw_minister = true;
         DEMO_CHECK(saw_minister, "第 10 次未触发部长预警");
     }
     DEMO_CHECK(settled(post_event({{"type", "FaultCleared"}, {"id", "EQ-NG01"},
@@ -549,6 +718,8 @@ int main() {
     // ========================================================================
     // 工位01 占用光电:100000 个含噪采样(LCG 确定性)灌入适配层;
     // 真实信号只翻转 2 次(空闲→占用→空闲)——验证噪声洪峰下事件率有界。
+    // 适配层过滤是客户端职责:两种模式下过滤器/映射网关都在 demo 进程内跑,
+    // 只有迁移沿候选上路(独立模式进程内 submit;服务器模式 POST /events)。
     {
         mse::PlcFilter filter("工位01-占用光电", mse::PlcFilter::Config{1.0, 0.0, 3, 0});
         mse::AdapterGateway gw;
@@ -574,9 +745,15 @@ int main() {
             if (!edge.has_value()) continue;  // 噪声/驻留中:到不了端点
             ++edges;
             auto cand = gw.translate("工位01-占用光电", *edge, t);
-            cand->trust = 3;  // 进程内适配器入口:显式信任级
-            if (sys.pipeline().submit(*cand).status == mse::Receipt::Status::kAccepted)
-                ++accepted_n;
+            if (g_server_mode) {
+                // 客户端模式:迁移沿候选经 HTTP 提交,PLC 网关凭证注入信任级
+                if (accepted(post_event(candidate_payload(*cand), "", kPlcToken)))
+                    ++accepted_n;
+            } else {
+                cand->trust = 3;  // 进程内适配器入口:显式信任级
+                if (g_sys->pipeline().submit(*cand).status == mse::Receipt::Status::kAccepted)
+                    ++accepted_n;
+            }
         }
         const double ms = std::chrono::duration<double, std::milli>(
                               std::chrono::steady_clock::now() - t0)
@@ -586,16 +763,24 @@ int main() {
         DEMO_CHECK(edges == 2, "迁移沿数应等于真实翻转次数 2");
         DEMO_CHECK(accepted_n == edges, "迁移沿应全部被异步受理");
         // 异步悬态口径:已验未结,drain 前视图看不到
-        std::printf("  悬态 %zu 条在异步队列(已验未结)→ drain_async 串行落账\n",
-                    sys.pipeline().async_pending());
-        const size_t drained = sys.pipeline().drain_async();
-        const size_t plc_events = sys.log().events_of_type("PlcEdgeReported").size();
+        if (g_server_mode)
+            std::printf("  悬态 %d 条在服务器异步队列(已验未结)→ POST /drain 串行落账\n",
+                        accepted_n);
+        else
+            std::printf("  悬态 %zu 条在异步队列(已验未结)→ drain_async 串行落账\n",
+                        g_sys->pipeline().async_pending());
+        const size_t drained = drain_async();
+        const size_t plc_events = count_settled("PlcEdgeReported");
         std::printf("  drain 结算 %zu 条;事件日志 PlcEdgeReported = %zu(零污染,有界)\n",
                     drained, plc_events);
         DEMO_CHECK(plc_events == 2, "噪声洪峰下结算事件数应有界(==2)");
-        DEMO_CHECK(
-            sys.projection().attrs_of("工位01").value("工位占用", "") == "空闲",
-            "工位01 终态应为空闲");
+        if (g_server_mode)
+            DEMO_CHECK(last_write_of("PlcEdgeReported", "工位01", "工位占用") == "空闲",
+                       "工位01 终态应为空闲(事件流末次写入佐证)");
+        else
+            DEMO_CHECK(
+                g_sys->projection().attrs_of("工位01").value("工位占用", "") == "空闲",
+                "工位01 终态应为空闲");
     }
 
     // 信任分级(真实 HTTP 凭证头):无凭证/错凭证被 L2 拒,PLC 网关凭证受理
@@ -608,14 +793,22 @@ int main() {
                    "无凭证提交 PLC 类型未被 L2 拒");
         const json r_bad = post_event(plc_payload, "← 错凭证:同样被拒", "forged-token");
         DEMO_CHECK(rejected_at(r_bad, 2), "错凭证未被拒");
-        const json r_ok = post_event(plc_payload, "← PLC 网关凭证", "plc-gw-01");
+        const json r_ok = post_event(plc_payload, "← PLC 网关凭证", kPlcToken);
         DEMO_CHECK(accepted(r_ok), "带 PLC 网关凭证未被受理");
-        const size_t drained_http = sys.pipeline().drain_async();
-        std::printf("  drain_async 结算 %zu 条;工位03 工位占用=%s\n", drained_http,
-                    sys.projection().attrs_of("工位03").value("工位占用", "?").c_str());
-        DEMO_CHECK(
-            sys.projection().attrs_of("工位03").value("工位占用", "") == "占用",
-            "工位03 终态应为占用");
+        const size_t drained_http = drain_async();
+        if (g_server_mode) {
+            std::printf("  POST /drain 结算 %zu 条;工位03 工位占用=%s(事件流末次写入)\n",
+                        drained_http,
+                        last_write_of("PlcEdgeReported", "工位03", "工位占用").c_str());
+            DEMO_CHECK(last_write_of("PlcEdgeReported", "工位03", "工位占用") == "占用",
+                       "工位03 终态应为占用");
+        } else {
+            std::printf("  drain_async 结算 %zu 条;工位03 工位占用=%s\n", drained_http,
+                        g_sys->projection().attrs_of("工位03").value("工位占用", "?").c_str());
+            DEMO_CHECK(
+                g_sys->projection().attrs_of("工位03").value("工位占用", "") == "占用",
+                "工位03 终态应为占用");
+        }
     }
 
     // ========================================================================
@@ -642,7 +835,7 @@ int main() {
                                    {"space", {{"raw", "左前门"}}},
                                    {"evidence", "img:defect-8821.jpg"}});
     DEMO_CHECK(settled(r_def), "缺陷登记未结算");
-    DEMO_CHECK(sys.log().events_of_type("VehicleLocked").size() == 1, "未自动锁车");
+    DEMO_CHECK(count_settled("VehicleLocked") == 1, "未自动锁车");
 
     std::printf("-- 锁定期间报工:应被 R-QUAL-LOCK 拦截(L3)--\n");
     const json r_rep0 = post_event({{"type", "ProductionReported"}, {"id", "VIN-LBV0001"},
@@ -673,8 +866,7 @@ int main() {
                                    {"actor", "rechecker-zhao"}, {"复检结论", "NOK"}},
                                   "← 复检不合格");
     DEMO_CHECK(settled(r_nok), "复检 NOK 未结算");
-    DEMO_CHECK(sys.log().events_of_type("ReworkRequested").size() == 2,
-               "NOK 未自动再开返修");
+    DEMO_CHECK(count_settled("ReworkRequested") == 2, "NOK 未自动再开返修");
     DEMO_CHECK(settled(post_event({{"type", "ReworkRecorded"}, {"id", "VIN-LBV0001"},
                                    {"actor", "reworker-wang"},
                                    {"返修内容", "二次返修:局部补漆并抛光"}})),
@@ -695,8 +887,7 @@ int main() {
                                    {"corrects", r_nok["event_id"].get<int64_t>()}},
                                   "← 误判改判,原判永存");
     DEMO_CHECK(settled(r_ovr), "改判未结算");
-    DEMO_CHECK(sys.log().corrections_of(r_nok["event_id"].get<int64_t>()).size() == 1,
-               "改判修正链断裂");
+    DEMO_CHECK(count_corrections(r_nok["event_id"].get<int64_t>()) == 1, "改判修正链断裂");
 
     DEMO_CHECK(settled(post_event({{"type", "VehicleUnlocked"}, {"id", "VIN-LBV0001"},
                                    {"actor", "qc-liuyang"}, {"锁定状态", "未锁"}})),
@@ -712,8 +903,15 @@ int main() {
                                       {"corrects", r_mis["event_id"].get<int64_t>()}},
                                      "← 携带 corrects 因果引用");
     DEMO_CHECK(settled(r_cancel), "缺陷撤销未结算");
-    DEMO_CHECK(sys.projection().attrs_of("VIN-LBV0002").value("车漆", "") == "完好",
-               "修正后终态错误");
+    if (g_server_mode) {
+        // F10 拦截视图的查询事件集不含 DefectCancelled,读不到冲正后终态;
+        // 以修正事件本身的已结算写入佐证(fold L1 语义下终态随之 supersede)
+        DEMO_CHECK(last_write_of("DefectCancelled", "VIN-LBV0002", "车漆") == "完好",
+                   "修正后终态错误");
+    } else {
+        DEMO_CHECK(g_sys->projection().attrs_of("VIN-LBV0002").value("车漆", "") == "完好",
+                   "修正后终态错误");
+    }
 
     // ========================================================================
     section("5. 设备:台账状态上报(一台故障→运行)");
@@ -753,15 +951,28 @@ int main() {
                                    {"corrects", r_wrong["event_id"].get<int64_t>()}},
                                   "← 冲正回 2,derive 随动")),
                "冲正未结算");
-    {
-        const json line = sys.projection().attrs_of("总装线");
+    if (g_server_mode) {
+        // 进程内投影不可达:经终态视图读回同一批派生指标(视图即投影截面)
+        const json line_a6 = view_row("V-EFF-A6", "总装线");
+        const json line_f16 = view_row("V-QUALITY-F16", "总装线");
+        std::printf("  总装线:计划产量=%s 实际产量=%s 达成率=%s(R-KPI-002) FTT=%s(R-KPI-003)"
+                    "(经 V-EFF-A6/V-QUALITY-F16 读回)\n",
+                    line_a6["计划产量"].dump().c_str(), line_a6["实际产量"].dump().c_str(),
+                    line_a6["达成率"].dump().c_str(), line_f16["FTT"].dump().c_str());
+        DEMO_CHECK(line_a6.value("实际产量", 0) == 2, "冲正后实际产量错误");
+        DEMO_CHECK(double_eq(line_a6["达成率"], 0.01), "达成率派生错误");
+        DEMO_CHECK(double_eq(line_f16["FTT"], 1.0), "FTT 派生错误");
+        const json vin1_f16 = view_row("V-QUALITY-F16", "VIN-LBV0001");
+        DEMO_CHECK(vin1_f16.value("缺陷总数", 0) == 1, "缺陷总数派生错误(误扫被拦不计)");
+    } else {
+        const json line = g_sys->projection().attrs_of("总装线");
         std::printf("  总装线:计划产量=%s 实际产量=%s 达成率=%s(R-KPI-002) FTT=%s(R-KPI-003)\n",
                     line["计划产量"].dump().c_str(), line["实际产量"].dump().c_str(),
                     line["达成率"].dump().c_str(), line["FTT"].dump().c_str());
         DEMO_CHECK(line.value("实际产量", 0) == 2, "冲正后实际产量错误");
         DEMO_CHECK(double_eq(line["达成率"], 0.01), "达成率派生错误");
         DEMO_CHECK(double_eq(line["FTT"], 1.0), "FTT 派生错误");
-        const json vin1 = sys.projection().attrs_of("VIN-LBV0001");
+        const json vin1 = g_sys->projection().attrs_of("VIN-LBV0001");
         DEMO_CHECK(vin1.value("缺陷总数", 0) == 1, "缺陷总数派生错误(误扫被拦不计)");
     }
 
@@ -772,18 +983,28 @@ int main() {
                          {{"key", "计划产量"}, {"from", "总装线"}}}},
          {"可用率", 0.92}, {"性能率", 0.95}, {"良品率", 0.98}})),
         "组成声明未结算");
-    {
-        const json ws = sys.projection().attrs_of("总装车间");
+    if (g_server_mode) {
+        const json ws = view_row("V-REPORT-D2", "总装车间");
+        std::printf("  总装车间:实际产量=%s(聚合自总装线) OEE=%s(= 0.92×0.95×0.98)"
+                    "(经 V-REPORT-D2 读回)\n",
+                    ws["实际产量"].dump().c_str(), ws["OEE"].dump().c_str());
+        DEMO_CHECK(ws.value("实际产量", 0) == 2, "聚合集回填错误");
+        DEMO_CHECK(ws.contains("OEE"), "OEE 未派生");
+    } else {
+        const json ws = g_sys->projection().attrs_of("总装车间");
         std::printf("  总装车间:实际产量=%s(聚合自总装线) OEE=%s(= 0.92×0.95×0.98)\n",
                     ws["实际产量"].dump().c_str(), ws["OEE"].dump().c_str());
         DEMO_CHECK(ws.value("实际产量", 0) == 2, "聚合集回填错误");
         DEMO_CHECK(ws.contains("OEE"), "OEE 未派生");
     }
 
+    if (g_server_mode) {
+        std::printf("-- entity 演化:跳过(服务器侧能力,见独立模式)--\n");
+    } else {
     std::printf("-- entity 演化:RFID 观测流浮现新本体(非人力创建)--\n");
     entitytree::MemoryEntityStore et_store;
     entity::Resolver            resolver(et_store);
-    sys.attach_entity_bridge(resolver, et_store);
+    g_sys->attach_entity_bridge(resolver, et_store);
     const char* kAnchor = "整车厂/总装车间/总装线/工位02";
     const char* keys[]  = {"观测标识", "观测来源", "载具类型"};
     const char* srcs[]  = {"rfid-gate-01", "rfid-gate-02"};
@@ -800,7 +1021,7 @@ int main() {
             obs.source_id  = src;
             obs.anchor_ref = kAnchor;
             obs.timestamp  = ts++;
-            auto newly = sys.entity_bridge()->ingest_observation(obs);
+            auto newly = g_sys->entity_bridge()->ingest_observation(obs);
             emerged.insert(emerged.end(), newly.begin(), newly.end());
         }
     }
@@ -808,10 +1029,11 @@ int main() {
     if (!emerged.empty()) {
         std::printf("  浮现新实体:%s → EntityObserved 候选经四层校验结算(本体诞生)\n",
                     emerged[0].entity_id.c_str());
-        DEMO_CHECK(sys.log().events_of_type("EntityObserved").size() == 1,
+        DEMO_CHECK(g_sys->log().events_of_type("EntityObserved").size() == 1,
                    "EntityObserved 未结算");
-        DEMO_CHECK(sys.projection().find(emerged[0].entity_id) != nullptr, "新本体未诞生");
+        DEMO_CHECK(g_sys->projection().find(emerged[0].entity_id) != nullptr, "新本体未诞生");
     }
+    }  // ---- entity 演化(独立模式)----
 
     // ========================================================================
     section("7. 读侧:44 个视图全清单渲染 + 重点视图详打 + AS OF 对比");
@@ -820,7 +1042,7 @@ int main() {
     const std::vector<std::string> all_views = {
         "V-ORDER-A1", "V-SEQ-A2", "V-PLAN-A3", "V-STATION-A4", "V-MONITOR-A5",
         "V-EFF-A6", "V-REPORT-A7",
-        "V-MAT-B1", "V-BOM-B2?entity=工位01", "V-STOCK-B3", "V-PKE-B4",
+        "V-MAT-B1", "V-BOM-B2?entity=" + url_encode("工位01"), "V-STOCK-B3", "V-PKE-B4",
         "V-TRACE-B5?entity=VIN-LBV0001", "V-CALL-B6", "V-KANBAN-B7", "V-PULL-B8",
         "V-JIS-B9", "V-JIT-B10", "V-LINESIDE-B11",
         "V-AVI-C1", "V-TRACK-C2?entity=VIN-LBV0002", "V-ZONE-C3",
@@ -840,7 +1062,7 @@ int main() {
     print_terminal_view("V-SEQ-A2 生产排序视图", get_view("/views/V-SEQ-A2"));
     std::printf("\n");
     print_terminal_view("V-PLAN-A3 作业计划下发队列(observer=计划员)",
-                        get_view("/views/V-PLAN-A3?observer=计划员"));
+                        get_view("/views/V-PLAN-A3?observer=" + url_encode("计划员")));
     std::printf("\n");
     const json vpke = get_view("/views/V-PKE-B4");
     print_intercept_view("V-PKE-B4 防错防漏校验", vpke);
@@ -867,7 +1089,7 @@ int main() {
     print_flow_view("V-ALARM-F15 逐级报警列表", get_view("/views/V-ALARM-F15"));
     std::printf("\n");
     print_flow_view("V-REWORK-001 返修流程(observer=复检员)",
-                    get_view("/views/V-REWORK-001?observer=复检员"));
+                    get_view("/views/V-REWORK-001?observer=" + url_encode("复检员")));
     std::printf("\n");
     print_flow_view("V-HIST-F9 车辆位置历史(VIN-LBV0002)",
                     get_view("/views/V-HIST-F9?entity=VIN-LBV0002"));
@@ -892,27 +1114,65 @@ int main() {
     // ========================================================================
     section("8. 收尾:事件/拦截/快照 + 崩溃恢复 + 重放逐比特一致 + 幂等重放");
     // ========================================================================
-    std::printf("  事件总数:%lld\n", (long long)sys.log().size());
-    std::printf("  RejectionLog 拦截条数:%zu\n", sys.rejections().recent(256).size());
-    const auto snap_latest = snapshots.latest();
+    if (g_server_mode) {
+        // ---- 客户端模式收尾:全部走 HTTP 可观测通道 ----
+        const json evs = get_view("/meta/events?limit=500");
+        std::printf("  事件总数(/meta/events):%zu\n", evs.size());
+        const json b4 = get_view("/views/V-PKE-B4");
+        const json f10 = get_view("/views/V-DEFECT-F10");
+        const size_t rej_b4 = b4.contains("rejections") ? b4["rejections"].size() : 0;
+        const size_t rej_f10 = f10.contains("rejections") ? f10["rejections"].size() : 0;
+        std::printf("  拦截视图 rejections:V-PKE-B4=%zu V-DEFECT-F10=%zu(拦截台全量口径)\n",
+                    rej_b4, rej_f10);
+        // 拦截视图契约:rejections = RejectionLog 全量(拦截台),rows 才是视图事件集截面
+        auto rej_has = [](const json& v, const std::string& type, int layer) {
+            if (!v.contains("rejections")) return false;
+            for (const json& rj : v["rejections"])
+                if (rj.value("layer", -1) == layer && rj.contains("candidate") &&
+                    rj["candidate"].value("type", "") == type)
+                    return true;
+            return false;
+        };
+        DEMO_CHECK(rej_has(b4, "MaterialVerified", 3), "B4 应含错料 R-MAT-PKE 拦截(L3)");
+        DEMO_CHECK(rej_has(f10, "DefectRegistered", 2), "F10 应含级别越界拦截(L2)");
+        std::printf("  跳过(服务器侧能力,见独立模式):定距快照 / 投影哈希×3 重放 /\n");
+        std::printf("    轨迹 trajectory_of / 崩溃恢复(同 db 重建)\n");
+        std::printf("  AS OF 对比:见第 7 节(V-AVI-C1?t=t_mid 与当前行数对比)\n");
+
+        std::printf("-- 幂等键重放:重复提交 ERP 订单(同一 idempotency_key)--\n");
+        const json dup = {{"type", "OrderReceived"}, {"id", "VIN-LBV0001"},
+                          {"actor", "erp"},           {"车型", "SUV-A"},
+                          {"订单状态", "接收"},       {"交付期", "2026-09-10"},
+                          {"idempotency_key", "erp-order-0001"}};
+        const json rd = post_event(dup, "← 幂等键重放");
+        DEMO_CHECK(settled(rd), "幂等重放未返回原回执");
+        DEMO_CHECK(rd["event_id"] == r_o1["event_id"], "幂等重放 event_id 不一致");
+        const json evs2 = get_view("/meta/events?limit=500");
+        DEMO_CHECK(evs2.size() == evs.size(), "幂等重放日志不应增长");
+        std::printf("  重复提交返回原 event_id=%lld,日志未增长\n",
+                    (long long)rd["event_id"].get<int64_t>());
+    } else {
+    std::printf("  事件总数:%lld\n", (long long)g_sys->log().size());
+    std::printf("  RejectionLog 拦截条数:%zu\n", g_sys->rejections().recent(256).size());
+    const auto snap_latest = snapshots_->latest();
     DEMO_CHECK(snap_latest.has_value(), "定距快照缺失");
     if (snap_latest)
         std::printf("  最近快照:截至 event #%lld(间隔 20)\n", (long long)snap_latest->first);
 
-    const std::string h0 = sys.projection().hash();
+    const std::string h0 = g_sys->projection().hash();
     bool replay_ok = true;
     for (int i = 0; i < 3; ++i) {  // 同输入重放 3 次,逐比特一致(最硬指标,含派生)
-        if (sys.pipeline().replay_projection(sys.log()).hash() != h0) replay_ok = false;
+        if (g_sys->pipeline().replay_projection(g_sys->log()).hash() != h0) replay_ok = false;
     }
     std::printf("  投影哈希 ×3 重放:%s(%s)\n", replay_ok ? "逐比特一致" : "不一致!",
                 h0.c_str());
     DEMO_CHECK(replay_ok, "重放逐比特一致被打破");
 
     std::printf("  轨迹 trajectory_of(VIN-LBV0002):\n");
-    for (const auto& [seq, anchor] : sys.spacetime().trajectory_of("VIN-LBV0002"))
+    for (const auto& [seq, anchor] : g_sys->spacetime().trajectory_of("VIN-LBV0002"))
         std::printf("    #%lld  %s\n", (long long)seq, anchor.c_str());
 
-    server.stop();  // 模拟崩溃:进程内系统丢弃,只用同一个 db 重建
+    server_->stop();  // 模拟崩溃:进程内系统丢弃,只用同一个 db 重建
     std::printf("-- 崩溃恢复:同一 db 重建 System(最近快照 + 增量重放)--\n");
     std::string h1;
     int64_t recovered_events = 0;
@@ -938,11 +1198,16 @@ int main() {
         std::printf("  重复提交返回原 event_id=%lld,日志未增长\n",
                     (long long)rd["event_id"].get<int64_t>());
     }
+    }  // ---- 独立模式收尾结束 ----
 
     // ========================================================================
     section(g_failures == 0 ? "演示完成:世界模型在车间有效" : "演示完成:存在红线被打破");
     // ========================================================================
-    std::printf("  数据库:mse_demo.db(事件/定义/快照/幂等)、mse_demo_voxels.db(时空)\n");
+    if (g_server_mode)
+        std::printf("  模式:客户端(--server %s:%d),世界在服务器侧 db\n", g_host.c_str(),
+                    g_port);
+    else
+        std::printf("  数据库:mse_demo.db(事件/定义/快照/幂等)、mse_demo_voxels.db(时空)\n");
     std::printf("  退出码:%d\n", g_failures == 0 ? 0 : 1);
     return g_failures == 0 ? 0 : 1;
 }

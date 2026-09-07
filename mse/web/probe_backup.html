@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>mse_server —— 车间世界模型人工验证</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 2em auto; max-width: 960px; }
+  code, pre { background: #f4f4f4; padding: 2px 6px; }
+  pre { padding: 1em; overflow-x: auto; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #ccc; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<h1>mse_server 占位首页</h1>
+<p>前端并行开发中;本页用于验证静态资源服务与端点连通性。</p>
+<h2>端点速查</h2>
+<table>
+  <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+  <tr><td>POST</td><td>/events</td><td>提交变化描述(头 <code>X-MSE-Token</code>:ui-token / plc-gw-token / erp-token)</td></tr>
+  <tr><td>GET</td><td>/views/{viewId}?observer=&amp;entity=&amp;t=</td><td>视图求值</td></tr>
+  <tr><td>POST</td><td>/drain</td><td>异步队列手动落账</td></tr>
+  <tr><td>GET</td><td>/meta/views</td><td>全部视图条目</td></tr>
+  <tr><td>GET</td><td>/meta/event-types</td><td>事件类型注册表</td></tr>
+  <tr><td>GET</td><td>/meta/attributes</td><td>属性字典</td></tr>
+  <tr><td>GET</td><td>/meta/anchors</td><td>时空锚点表</td></tr>
+  <tr><td>GET</td><td>/meta/ontologies</td><td>本体 id + 属性键清单(不含值)</td></tr>
+  <tr><td>GET</td><td>/meta/events?limit=50</td><td>最近 N 条事件(上限 500)</td></tr>
+</table>
+<pre id="probe">正在探测 /meta/views …</pre>
+<script>
+fetch('/meta/views').then(r => r.json()).then(v => {
+  document.getElementById('probe').textContent =
+    'GET /meta/views → ' + v.length + ' 个视图:\n' +
+    v.map(e => '  ' + e.view_id + '  [' + e.render_mode + ']').join('\n');
+}).catch(e => {
+  document.getElementById('probe').textContent = '探测失败:' + e;
+});
+</script>
+</body>
+</html>
