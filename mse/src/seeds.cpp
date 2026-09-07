@@ -187,7 +187,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
     // -- B 物料 --
     reg_attr(defs, attr_payload("物料编号", "物料主数据编号(扫码比对的键)",
         "string", "", {}, {"MaterialRegistered", "MaterialRetired", "MaterialVerified",
-                           "StockUpdated", "PullOrderCreated"}));
+                           "StockUpdated", "PullOrderCreated",
+                           "MaterialCallRaised", "MaterialCallCancelled"}));
     reg_attr(defs, attr_payload("批次号", "物料批次号(追溯锚)",
         "string", "", {}, {"MaterialRegistered", "StockUpdated"}));
     reg_attr(defs, attr_payload("库存数量", "实时库存数量",
@@ -415,6 +416,11 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         R"({"if":[{"==":[{"var":"呼叫状态"},"呼叫中"]},
                   {"pass":true},
                   {"reject":"R-VIEW-CALL:呼叫已响应/取消,不在缺料呼叫看板"}]})", "read"));
+    // F13 车辆锁定列表:只显示当前已锁的行(规则决定行)
+    reg_rule(defs, rule_payload("R-VIEW-LOCKED", {"锁定状态"}, "filter", "",
+        R"({"if":[{"==":[{"var":"锁定状态"},"已锁"]},
+                  {"pass":true},
+                  {"reject":"R-VIEW-LOCKED:未锁定,不在锁定列表"}]})", "read"));
     // B7-B10 四类拉动单视图:各自只出本类型的行。
     reg_rule(defs, rule_payload("R-VIEW-KANBAN", {"拉动类型"}, "filter", "",
         R"({"if":[{"==":[{"var":"拉动类型"},"Kanban"]},{"pass":true},
@@ -514,8 +520,10 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
 
     // -- E PMC --
     reg_type(defs, type_payload("FaultAlarmed", {"id", "actor", "检点", "故障码"},
-                                {"设备状态", "故障级别"}, {}, "", false));
-    reg_type(defs, type_payload("FaultCleared", {"id", "actor", "设备状态"}, {"检点", "故障码"}, {}, "", false));
+                                {"设备状态", "故障级别"}, {}, "", false,
+                                {{"设备状态", "故障"}}));
+    reg_type(defs, type_payload("FaultCleared", {"id", "actor", "设备状态"}, {"检点", "故障码"}, {}, "", false,
+                                {{"设备状态", "运行"}}));
     reg_type(defs, type_payload("CountUpdated", {"id", "actor"},
                                 {"产量计数", "停线计数", "首次合格数", "缓冲区计数"}, {}, "", false));
     reg_type(defs, type_payload("AlarmAcknowledged", {"id", "actor"}, {"报警级别", "检点"}, {}, "", false));
@@ -938,7 +946,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"view_id", "V-LOCK-F13"},
         {"queries", {{"events", {"VehicleLocked", "VehicleUnlocked"}}, {"fold", "L1"}}},
         {"selects", {"锁定状态", "车漆", "缺陷级别"}},
-        {"rules", json::array()},
+        {"rules", {"R-VIEW-LOCKED"}},
         {"emits", {"VehicleUnlocked"}},
         {"render_mode", "终态"}});
     // F14 车辆追溯(遍历):车辆→批次→供应商,法规件追溯。
