@@ -66,6 +66,16 @@ const char* type_name(FieldType t) {
     return "TEXT";
 }
 
+/// 前缀 → LIKE 模式：转义 \ % _ 后追加 %（配合 ESCAPE '\' 使用）。
+std::string prefix_pattern(const std::string& prefix) {
+    std::string pat;
+    for (char ch : prefix) {
+        if (ch == '\\' || ch == '%' || ch == '_') pat += '\\';
+        pat += ch;
+    }
+    return pat + "%";
+}
+
 } // namespace
 
 SqliteBackend::SqliteBackend(const std::string& path) {
@@ -195,8 +205,10 @@ std::vector<Record> SqliteBackend::query(const std::string& table,
             first = false;
             switch (c.op) {
                 case Op::Eq: sql += c.field + " = ?"; break;
+                case Op::Ne: sql += c.field + " != ?"; break;  // NULL 行不命中（!= 对 NULL 求值为 NULL），与 Le/Ge 一致
                 case Op::Le: sql += c.field + " <= ?"; break;
                 case Op::Ge: sql += c.field + " >= ?"; break;
+                case Op::Prefix: sql += c.field + " LIKE ? ESCAPE '\\'"; break;  // NULL 行不命中（LIKE 对 NULL 求值为 NULL）
                 case Op::IsNull: sql += c.field + " IS NULL"; break;
                 case Op::NotNull: sql += c.field + " IS NOT NULL"; break;
             }
@@ -215,8 +227,11 @@ std::vector<Record> SqliteBackend::query(const std::string& table,
 
     Stmt st(db_, sql);
     int i = 1;
-    for (const auto& c : conds)
-        if (c.op != Op::IsNull && c.op != Op::NotNull) st.bind_value(i++, c.value);
+    for (const auto& c : conds) {
+        if (c.op == Op::IsNull || c.op == Op::NotNull) continue;
+        if (c.op == Op::Prefix) st.bind_value(i++, vtext(prefix_pattern(as_text(c.value))));
+        else st.bind_value(i++, c.value);
+    }
 
     std::vector<Record> out;
     while (st.step()) {
@@ -247,8 +262,10 @@ void SqliteBackend::update_where(const std::string& table,
             first = false;
             switch (c.op) {
                 case Op::Eq: sql += c.field + " = ?"; break;
+                case Op::Ne: sql += c.field + " != ?"; break;  // NULL 行不命中，与 Le/Ge 一致
                 case Op::Le: sql += c.field + " <= ?"; break;
                 case Op::Ge: sql += c.field + " >= ?"; break;
+                case Op::Prefix: sql += c.field + " LIKE ? ESCAPE '\\'"; break;
                 case Op::IsNull: sql += c.field + " IS NULL"; break;
                 case Op::NotNull: sql += c.field + " IS NOT NULL"; break;
             }
@@ -257,8 +274,11 @@ void SqliteBackend::update_where(const std::string& table,
     Stmt st(db_, sql);
     int i = 1;
     for (const auto& [f, v] : patch) st.bind_value(i++, v);
-    for (const auto& c : conds)
-        if (c.op != Op::IsNull && c.op != Op::NotNull) st.bind_value(i++, c.value);
+    for (const auto& c : conds) {
+        if (c.op == Op::IsNull || c.op == Op::NotNull) continue;
+        if (c.op == Op::Prefix) st.bind_value(i++, vtext(prefix_pattern(as_text(c.value))));
+        else st.bind_value(i++, c.value);
+    }
     st.step();
 }
 

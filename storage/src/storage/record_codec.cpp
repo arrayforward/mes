@@ -96,8 +96,19 @@ bool record_matches(const Record& rec, const std::vector<Condition>& conds) {
                      (!is_null(v) && !is_null(c.value) &&
                       value_to_json(v) == value_to_json(c.value));
                 break;
+            case Op::Ne:
+                // 与 Le/Ge 一致：NULL 行不命中（不等关系只在非空值之间成立）
+                ok = !is_null(v) &&
+                     (is_null(c.value) || value_to_json(v) != value_to_json(c.value));
+                break;
             case Op::Le: ok = !is_null(v) && compare_values(v, c.value) <= 0; break;
             case Op::Ge: ok = !is_null(v) && compare_values(v, c.value) >= 0; break;
+            case Op::Prefix:
+                // 仅文本值参与前缀匹配；非 string 的字段值或前缀不命中
+                ok = !is_null(v) && std::holds_alternative<std::string>(v) &&
+                     std::holds_alternative<std::string>(c.value) &&
+                     as_text(v).rfind(as_text(c.value), 0) == 0;
+                break;
             case Op::IsNull: ok = is_null(v); break;
             case Op::NotNull: ok = !is_null(v); break;
             default: ok = false;

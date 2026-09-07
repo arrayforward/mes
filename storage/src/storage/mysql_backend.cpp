@@ -57,6 +57,17 @@ const char* type_name(FieldType t, bool indexed) {
     return "TEXT";
 }
 
+/// 前缀 → LIKE 模式：转义 \ % _ 后追加 %（配合 ESCAPE '\' 使用；
+/// 模式再过 literal() 做 SQL 字面量转义）。
+std::string prefix_pattern(const std::string& prefix) {
+    std::string pat;
+    for (char ch : prefix) {
+        if (ch == '\\' || ch == '%' || ch == '_') pat += '\\';
+        pat += ch;
+    }
+    return pat + "%";
+}
+
 } // namespace
 
 MySqlBackend::MySqlBackend(const std::string& dsn) {
@@ -206,8 +217,13 @@ std::string MySqlBackend::where_clause(const std::vector<Condition>& conds) {
         first = false;
         switch (c.op) {
             case Op::Eq: sql += c.field + " = " + literal(c.value); break;
+            case Op::Ne: sql += c.field + " != " + literal(c.value); break;  // NULL 行不命中，与 Le/Ge 一致
             case Op::Le: sql += c.field + " <= " + literal(c.value); break;
             case Op::Ge: sql += c.field + " >= " + literal(c.value); break;
+            case Op::Prefix:  // LIKE 'prefix%' ESCAPE '\'；NULL 行不命中（LIKE 对 NULL 求值为 NULL）
+                sql += c.field + " LIKE " + literal(vtext(prefix_pattern(as_text(c.value)))) +
+                       " ESCAPE '\\\\'";
+                break;
             case Op::IsNull: sql += c.field + " IS NULL"; break;
             case Op::NotNull: sql += c.field + " IS NOT NULL"; break;
         }

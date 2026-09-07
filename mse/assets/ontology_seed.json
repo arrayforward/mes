@@ -1,0 +1,166 @@
+{
+  "version": "1.0.0",
+  "comment": "mse 制造域种子本体(语义图谱树 schema):覆盖整车厂种子定义的事件类型与属性键。概念名与事件类型名/属性键字面一致,便于 suggest_followups 映射回已注册候选。运行时只读,变更需升 version。",
+  "concepts": [
+    { "name": "事件", "attrs": { "layer": "root" } },
+    { "name": "计划事件", "is_a": "事件" },
+    { "name": "OrderReceived", "is_a": "计划事件", "attrs": { "zh": "订单接收" } },
+    { "name": "OrderRevoked", "is_a": "计划事件", "attrs": { "zh": "订单撤销" } },
+    { "name": "PlanReleased", "is_a": "计划事件", "attrs": { "zh": "计划下发" } },
+    { "name": "PlanRolledBack", "is_a": "计划事件", "attrs": { "zh": "计划退回" } },
+    { "name": "SequenceAdjusted", "is_a": "计划事件", "attrs": { "zh": "顺序调整" } },
+    { "name": "SequenceAdjustReversed", "is_a": "计划事件", "attrs": { "zh": "顺序调整撤销" } },
+    { "name": "生产事件", "is_a": "事件" },
+    { "name": "VehicleEnteredZone", "is_a": "生产事件", "attrs": { "zh": "车辆过点" } },
+    { "name": "PassageCorrected", "is_a": "生产事件", "attrs": { "zh": "过点修正" } },
+    { "name": "ProductionReported", "is_a": "生产事件", "attrs": { "zh": "生产报工" } },
+    { "name": "ReportReversed", "is_a": "生产事件", "attrs": { "zh": "报工冲销" } },
+    { "name": "CompositionDeclared", "is_a": "生产事件", "attrs": { "zh": "组成声明" } },
+    { "name": "EntityObserved", "is_a": "事件", "attrs": { "zh": "实体观测(非人力创建)" } },
+    { "name": "质量事件", "is_a": "事件" },
+    { "name": "DefectRegistered", "is_a": "质量事件", "attrs": { "zh": "缺陷登记" } },
+    { "name": "DefectCancelled", "is_a": "质量事件", "attrs": { "zh": "缺陷撤销" } },
+    { "name": "VehicleLocked", "is_a": "质量事件", "attrs": { "zh": "车辆锁定" } },
+    { "name": "VehicleUnlocked", "is_a": "质量事件", "attrs": { "zh": "车辆解锁" } },
+    { "name": "ReworkRequested", "is_a": "质量事件", "attrs": { "zh": "返修请求" } },
+    { "name": "ReworkCancelled", "is_a": "质量事件", "attrs": { "zh": "返修撤销" } },
+    { "name": "ReworkRecorded", "is_a": "质量事件", "attrs": { "zh": "返修记录" } },
+    { "name": "ReworkSubmitted", "is_a": "质量事件", "attrs": { "zh": "返修提交" } },
+    { "name": "RecheckJudged", "is_a": "质量事件", "attrs": { "zh": "复检判定" } },
+    { "name": "JudgementOverruled", "is_a": "质量事件", "attrs": { "zh": "判定推翻" } },
+    { "name": "ReworkClosed", "is_a": "质量事件", "attrs": { "zh": "返修关闭" } },
+
+    { "name": "属性", "attrs": { "layer": "root" } },
+    { "name": "状态属性", "is_a": "属性" },
+    { "name": "计划状态", "is_a": "状态属性", "attrs": { "range": "01..05" } },
+    { "name": "锁定状态", "is_a": "状态属性", "attrs": { "range": "未锁|已锁" } },
+    { "name": "锁定", "is_a": "状态属性", "attrs": { "zh": "质量锁定状态" } },
+    { "name": "车漆", "is_a": "状态属性", "attrs": { "range": "完好|划痕|凹陷|色差" } },
+    { "name": "度量属性", "is_a": "属性" },
+    { "name": "优先级", "is_a": "度量属性" },
+    { "name": "缺陷级别", "is_a": "度量属性", "attrs": { "range": "1|2|3" } },
+    { "name": "报工数量", "is_a": "度量属性", "attrs": { "unit": "件" } },
+    { "name": "计划产量", "is_a": "度量属性", "attrs": { "unit": "件" } },
+    { "name": "实际产量", "is_a": "度量属性", "attrs": { "unit": "件" } },
+    { "name": "可用率", "is_a": "度量属性" },
+    { "name": "性能率", "is_a": "度量属性" },
+    { "name": "良品率", "is_a": "度量属性" },
+    { "name": "OEE", "is_a": "度量属性" },
+    { "name": "描述属性", "is_a": "属性" },
+    { "name": "车型", "is_a": "描述属性" },
+    { "name": "过点区域", "is_a": "描述属性" },
+    { "name": "返修内容", "is_a": "描述属性" },
+    { "name": "复检结论", "is_a": "描述属性", "attrs": { "range": "OK|NOK" } },
+
+    { "name": "缺陷", "attrs": { "layer": "root" } },
+    { "name": "漆面缺陷", "is_a": "缺陷" },
+    { "name": "划痕", "is_a": "漆面缺陷" },
+    { "name": "凹陷", "is_a": "漆面缺陷" },
+    { "name": "色差", "is_a": "漆面缺陷" },
+
+    { "name": "作业活动", "attrs": { "layer": "root" } },
+    { "name": "返修", "is_a": "作业活动" },
+    { "name": "复检", "is_a": "作业活动" },
+    { "name": "报工", "is_a": "作业活动" },
+    { "name": "下线", "is_a": "作业活动" }
+  ],
+  "relations": [
+    { "from": "DefectRegistered", "to": "车漆", "type": "REQUIRES", "weight": 0.9 },
+    { "from": "DefectRegistered", "to": "缺陷级别", "type": "REQUIRES", "weight": 0.9 },
+    { "from": "ProductionReported", "to": "报工数量", "type": "REQUIRES", "weight": 0.9 },
+    { "from": "RecheckJudged", "to": "复检结论", "type": "REQUIRES", "weight": 0.9 },
+    { "from": "ReworkRecorded", "to": "返修内容", "type": "REQUIRES", "weight": 0.8 },
+    { "from": "返修", "to": "复检", "type": "REQUIRES", "weight": 0.7 },
+    { "from": "漆面缺陷", "to": "车漆", "type": "COOCCUR", "weight": 0.6 }
+  ],
+  "rules": [
+    {
+      "id": "rl-defect-rework",
+      "antecedent": "漆面缺陷",
+      "relation": "TRIGGERS",
+      "consequent": "ReworkRequested",
+      "confidence": 0.85,
+      "note": "漆面缺陷(划痕/凹陷/色差)通常触发返修请求"
+    },
+    {
+      "id": "rl-defect-lock",
+      "antecedent": "DefectRegistered",
+      "relation": "TRIGGERS",
+      "consequent": "VehicleLocked",
+      "confidence": 0.8,
+      "note": "缺陷级别 ≥2 的登记触发车辆锁定(对应规则 R-QUAL-TRIGGER)"
+    },
+    {
+      "id": "rl-recheck-nok-rework",
+      "antecedent": "RecheckJudged",
+      "relation": "CAUSES",
+      "consequent": "ReworkRequested",
+      "confidence": 0.7,
+      "note": "复检 NOK 引发新一轮返修(对应规则 R-REWORK-TRIGGER)"
+    },
+    {
+      "id": "rl-lock-prevents-report",
+      "antecedent": "锁定",
+      "relation": "PREVENTS",
+      "consequent": "ProductionReported",
+      "confidence": 0.9,
+      "note": "锁定车辆不得下线/报工(对应规则 R-QUAL-LOCK)"
+    },
+    {
+      "id": "rl-rework-flow-record",
+      "antecedent": "ReworkRequested",
+      "relation": "TRIGGERS",
+      "consequent": "ReworkRecorded",
+      "confidence": 0.9,
+      "note": "返修流程:请求 → 记录"
+    },
+    {
+      "id": "rl-rework-flow-submit",
+      "antecedent": "ReworkRecorded",
+      "relation": "TRIGGERS",
+      "consequent": "ReworkSubmitted",
+      "confidence": 0.9,
+      "note": "返修流程:记录 → 提交"
+    },
+    {
+      "id": "rl-rework-flow-recheck",
+      "antecedent": "ReworkSubmitted",
+      "relation": "TRIGGERS",
+      "consequent": "RecheckJudged",
+      "confidence": 0.9,
+      "note": "返修流程:提交 → 复检"
+    },
+    {
+      "id": "rl-rework-flow-close",
+      "antecedent": "RecheckJudged",
+      "relation": "TRIGGERS",
+      "consequent": "ReworkClosed",
+      "confidence": 0.7,
+      "note": "复检 OK 后关闭返修单"
+    },
+    {
+      "id": "rl-order-plan",
+      "antecedent": "OrderReceived",
+      "relation": "TRIGGERS",
+      "consequent": "PlanReleased",
+      "confidence": 0.85,
+      "note": "订单接收后进入计划下发(五状态机 01→02)"
+    },
+    {
+      "id": "rl-plan-report",
+      "antecedent": "PlanReleased",
+      "relation": "TRIGGERS",
+      "consequent": "ProductionReported",
+      "confidence": 0.7,
+      "note": "计划下发到生产中状态后产生报工"
+    },
+    {
+      "id": "rl-kpi-requires",
+      "antecedent": "OEE",
+      "relation": "REQUIRES",
+      "consequent": "CompositionDeclared",
+      "confidence": 0.8,
+      "note": "OEE 推导依赖组成声明携带的可用率/性能率/良品率(对应规则 R-KPI-001)"
+    }
+  ]
+}

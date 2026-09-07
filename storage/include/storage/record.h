@@ -9,7 +9,7 @@
 //   Value      类型化字段值：null / int64 / double / text（JSON 一律存 text）
 //   Record     一条记录 = 字段名 → Value
 //   TableSchema 表结构：字段类型、主键（或自增 seq）、二级索引声明
-//   Condition  查询条件：Eq / Le / Ge / IsNull / NotNull
+//   Condition  查询条件：Eq / Ne / Le / Ge / Prefix / IsNull / NotNull
 //   Ordering   排序：字段 + 升降序
 
 #include <cstdint>
@@ -45,12 +45,16 @@ struct TableSchema {
     std::vector<std::vector<std::string>> indexes;  // 二级索引（可复合）
 };
 
-enum class Op { Eq, Le, Ge, IsNull, NotNull };
+// 比较算子。
+//   Ne     不等于；与 Le/Ge 一致：NULL 行不命中（不等关系只在非空值之间成立）
+//   Prefix 文本前缀匹配：value 须为 string，字段的文本值以该前缀开头；
+//          非文本字段值与 NULL 行均不命中
+enum class Op { Eq, Ne, Le, Ge, Prefix, IsNull, NotNull };
 
 struct Condition {
     std::string field;
     Op op;
-    Value value = nullptr;  // IsNull/NotNull 时忽略
+    Value value = nullptr;  // IsNull/NotNull 时忽略；Prefix 时须为 string
 };
 
 struct Ordering {

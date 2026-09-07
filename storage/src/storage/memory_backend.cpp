@@ -112,10 +112,19 @@ bool MemoryBackend::matches(const Record& rec, const Condition& c) {
         case Op::Eq:
             if (is_null(v) || is_null(c.value)) return is_null(v) && is_null(c.value);
             return value_key(v) == value_key(c.value);
+        case Op::Ne:
+            // 与 Le/Ge 一致：NULL 行不命中（不等关系只在非空值之间成立）
+            if (is_null(v)) return false;
+            return is_null(c.value) || value_key(v) != value_key(c.value);
         case Op::Le:
             return !is_null(v) && compare_values(v, c.value) <= 0;
         case Op::Ge:
             return !is_null(v) && compare_values(v, c.value) >= 0;
+        case Op::Prefix:
+            // 仅文本值参与前缀匹配；非 string 的字段值或前缀不命中
+            return !is_null(v) && std::holds_alternative<std::string>(v) &&
+                   std::holds_alternative<std::string>(c.value) &&
+                   as_text(v).rfind(as_text(c.value), 0) == 0;
         case Op::IsNull:
             return is_null(v);
         case Op::NotNull:

@@ -1,0 +1,57 @@
+{
+  "version": "1.0.0",
+  "comment": "mse 制造域种子词典(ame schema):syn_strong 归并别名、syn_near 建 SIMILAR 弱边、antonyms 建 OPPOSITE 边。供属性提取的词形归一与近义命中。",
+  "entries": [
+    {
+      "word": "划痕",
+      "syn_strong": ["刮痕", "划伤"],
+      "syn_near": [{ "word": "擦伤", "score": 0.7 }]
+    },
+    {
+      "word": "凹陷",
+      "syn_strong": ["凹坑"],
+      "syn_near": [{ "word": "磕碰", "score": 0.65 }]
+    },
+    {
+      "word": "色差",
+      "syn_near": [
+        { "word": "变色", "score": 0.75 },
+        { "word": "偏色", "score": 0.7 }
+      ]
+    },
+    {
+      "word": "返修",
+      "syn_strong": ["返工"],
+      "syn_near": [{ "word": "重修", "score": 0.7 }]
+    },
+    {
+      "word": "复检",
+      "syn_strong": ["复查"],
+      "syn_near": [{ "word": "终检", "score": 0.7 }]
+    },
+    {
+      "word": "锁定",
+      "syn_strong": ["锁车"],
+      "antonyms": ["解锁"]
+    },
+    {
+      "word": "报工",
+      "syn_near": [
+        { "word": "完工申报", "score": 0.8 },
+        { "word": "产量上报", "score": 0.75 }
+      ]
+    },
+    {
+      "word": "下线",
+      "syn_near": [{ "word": "出车", "score": 0.7 }]
+    },
+    {
+      "word": "工位",
+      "syn_near": [{ "word": "站位", "score": 0.75 }]
+    },
+    {
+      "word": "计划状态",
+      "syn_near": [{ "word": "订单状态", "score": 0.7 }]
+    }
+  ]
+}

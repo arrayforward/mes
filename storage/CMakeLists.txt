@@ -96,6 +96,11 @@ target_link_libraries(entity_tests PRIVATE unistore)
 target_compile_options(entity_tests PRIVATE -Wall -Wextra)
 target_link_options(entity_tests PRIVATE ${EVENTSTORE_STATIC_RUNTIME})
 
+add_executable(record_tests tests/record_test_main.cpp tests/record_conformance.cpp)
+target_link_libraries(record_tests PRIVATE unistore)
+target_compile_options(record_tests PRIVATE -Wall -Wextra)
+target_link_options(record_tests PRIVATE ${EVENTSTORE_STATIC_RUNTIME})
+
 add_executable(demo_story examples/demo_story.cpp)
 target_link_libraries(demo_story PRIVATE unistore)
 target_link_options(demo_story PRIVATE ${EVENTSTORE_STATIC_RUNTIME})
@@ -108,5 +113,6 @@ enable_testing()
 add_test(NAME eventstore_conformance COMMAND eventstore_tests)
 add_test(NAME voxel_conformance COMMAND voxel_tests)
 add_test(NAME entity_conformance COMMAND entity_tests)
+add_test(NAME record_conformance COMMAND record_tests)
 
 endif()  # UNISTORE_BUILD_TESTS

@@ -39,6 +39,7 @@ mechanical-heart/
 ├── knowledge/             语义图谱树(本体 / 推理 / 词汇-联想)
 ├── storage/               统一数据存储层(EventStore / VoxelStore / EntityStore)
 ├── voxel/                 时空记忆块服务(stmb:4D 可回溯结构化记忆)
+├── mse/                   车间世界模型 MES 业务模块(四原语 + 两个动词,docs/mes 落地)
 └── bench/                 心跳 tick 基准测试(五阶段循环的可执行版本)
 ```
 
@@ -49,6 +50,7 @@ mechanical-heart/
 | **knowledge** | 语义理解 | `Engine`: 本体推理 + 符号扩展 + 关键词图扩散 + 八步摄入管道 | [knowledge/README.md](knowledge/README.md) |
 | **storage** | 持久化底座 | `RecordBackend` SPI + EventStore / VoxelStore / EntityStore 三个领域模型 | [storage/README.md](storage/README.md) |
 | **voxel** | 时空记忆 | `StmbService`: 块状态机 + 置信度衰减 + 版本回溯 + LOD + 动静分离 + 仲裁管线 | [voxel/README.md](voxel/README.md) |
+| **mse** | MES 业务模块 | 车间世界模型内核:四原语(本体/事件/规则/视图)+ 两个动词(POST /events、GET /views/{id}),46 视图业务种子 + 端到端 demo,`docs/mes` 的工程落地 | [mse/README.md](mse/README.md) |
 | **bench** | 心跳基准 | `tick_bench`: 五阶段串行计时 + 分位数统计 + memory/sqlite 双口径 | [bench/README.md](bench/README.md) |
 
 依赖方向(无环):
@@ -60,6 +62,10 @@ entity ─┬─→ storage
 knowledge ──→ storage            (只读消费事件侧写)
 
 voxel    ──→ storage             (桥接 et_sources)
+
+mse      ──→ storage / geocore / knowledge / entity / voxel
+                                 (挂在五底座之上的业务模块:storage 是唯一持久化接口,
+                                  knowledge/entity 只产出建议与候选,不碰状态)
 
 外部应用 / 大模型 ──→ 各模块公开 API
 ```
@@ -93,7 +99,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 各子模块也可独立构建(子模块 README 给出了具体命令与依赖),路径可用
-`-DENTITY_STORAGE_DIR=` / `-DENTITY_GEOCORE_DIR=` 等覆盖。
+`-DENTITY_STORAGE_DIR=` / `-DENTITY_GEOCORE_DIR=` 等覆盖。mse 业务模块独立构建:
+`cmake -S mse -B mse/build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build mse/build -j
+&& ctest --test-dir mse/build --output-on-failure`(含 mse_tests 红线测试与 mse_demo 端到端冒烟)。
 
 Windows MinGW 用户:`geocore` 与 `voxel` 已在 MinGW g++ 13 + Ninja 下验证全绿
 (`build-mingw/`);`knowledge` 通过 `cmake/ame_mingw_compat.h` 解决 ame vendored

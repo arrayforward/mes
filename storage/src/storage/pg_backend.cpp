@@ -39,6 +39,16 @@ std::string param_text(const Value& v) {
     return as_text(v);
 }
 
+/// 前缀 → LIKE 模式：转义 \ % _ 后追加 %（配合 ESCAPE '\' 使用）。
+std::string prefix_pattern(const std::string& prefix) {
+    std::string pat;
+    for (char ch : prefix) {
+        if (ch == '\\' || ch == '%' || ch == '_') pat += '\\';
+        pat += ch;
+    }
+    return pat + "%";
+}
+
 /// 一次参数化执行。params 中 nullopt 表示 SQL NULL。
 struct PgResultGuard {
     PGresult* res = nullptr;
@@ -223,12 +233,18 @@ std::vector<Record> PgBackend::query(const std::string& table,
             first = false;
             switch (c.op) {
                 case Op::Eq: sql += c.field + " = $" + std::to_string(++n); break;
+                case Op::Ne: sql += c.field + " != $" + std::to_string(++n); break;  // NULL 行不命中，与 Le/Ge 一致
                 case Op::Le: sql += c.field + " <= $" + std::to_string(++n); break;
                 case Op::Ge: sql += c.field + " >= $" + std::to_string(++n); break;
+                case Op::Prefix:  // LIKE $n ESCAPE '\'；NULL 行不命中（LIKE 对 NULL 求值为 NULL）
+                    sql += c.field + " LIKE $" + std::to_string(++n) + " ESCAPE '\\'";
+                    break;
                 case Op::IsNull: sql += c.field + " IS NULL"; break;
                 case Op::NotNull: sql += c.field + " IS NOT NULL"; break;
             }
-            if (c.op != Op::IsNull && c.op != Op::NotNull)
+            if (c.op == Op::Prefix)
+                params.push_back(prefix_pattern(as_text(c.value)));
+            else if (c.op != Op::IsNull && c.op != Op::NotNull)
                 params.push_back(is_null(c.value)
                                      ? std::nullopt
                                      : std::optional<std::string>(param_text(c.value)));
@@ -296,12 +312,18 @@ void PgBackend::update_where(const std::string& table,
             first = false;
             switch (c.op) {
                 case Op::Eq: sql += c.field + " = $" + std::to_string(++n); break;
+                case Op::Ne: sql += c.field + " != $" + std::to_string(++n); break;  // NULL 行不命中，与 Le/Ge 一致
                 case Op::Le: sql += c.field + " <= $" + std::to_string(++n); break;
                 case Op::Ge: sql += c.field + " >= $" + std::to_string(++n); break;
+                case Op::Prefix:  // LIKE $n ESCAPE '\'；NULL 行不命中（LIKE 对 NULL 求值为 NULL）
+                    sql += c.field + " LIKE $" + std::to_string(++n) + " ESCAPE '\\'";
+                    break;
                 case Op::IsNull: sql += c.field + " IS NULL"; break;
                 case Op::NotNull: sql += c.field + " IS NOT NULL"; break;
             }
-            if (c.op != Op::IsNull && c.op != Op::NotNull)
+            if (c.op == Op::Prefix)
+                params.push_back(prefix_pattern(as_text(c.value)));
+            else if (c.op != Op::IsNull && c.op != Op::NotNull)
                 params.push_back(is_null(c.value)
                                      ? std::nullopt
                                      : std::optional<std::string>(param_text(c.value)));
