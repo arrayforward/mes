@@ -52,11 +52,14 @@ public:
     /// {
     ///   "view_id", "render_mode", "observer", "as_of_seq",
     ///   "columns": [...],                      // selects ∪ variant 列(字典序保持声明序)
-    ///   "rows":    [...],                      // 终态:本体行(含 "buttons" 每行按钮可用性)
-    ///                                          // 流水:事件行(L1+L2 修正成对,带 corrects 标注)
+    ///   "rows":    [...],                      // 终态:本体行(含 "buttons" 每行按钮可用性
+    ///                                          //   + presets + options 合法选项);
+    ///                                          // 流水:事件行(L1+L2 修正成对,带 corrects
+    ///                                          //   标注 + "buttons" 行内动作(含 id/corrects))
     ///                                          // 拦截:已结算事实行
     ///   "rejections": [...],                   // 仅拦截模式:近期 L0 拦截反馈
-    ///   "actions": [{"type", "enabled", "reasons":[]}]  // 视图级可发起事件
+    ///   "actions": [{"type", "presets", "options"}]  // 视图级可发起事件
+    ///                                              // (options 无行上下文,取值域全量)
     /// }
     /// 视图未注册/已弃用 → 返回 {"error": ...}。
     json render(const std::string& view_id, const ViewParams& params) const;

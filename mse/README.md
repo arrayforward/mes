@@ -155,6 +155,15 @@ ctest --test-dir mse/build --output-on-failure   # mse_tests + mse_demo_smoke
   类型的 `presets` 写入初值(字段旁 ● 标记,可改,写侧规则兜底);回执三态:
   settled(落账 event_id)、rejected(layer + violations 红框展示)、
   accepted(异步悬态,点"落账"触发 POST /drain 后进日志)。
+- **按钮带合法选项**:终态行按钮与视图级 actions 除 presets 外携带 `options`——
+  服务端对每个 enum 键逐值构造合成候选、走与 enabled 判定同一 eval_filters 路径
+  试探合法值(如 A3 的 01 行 PlanReleased 只给 `计划状态=["02"]`);表单据此把
+  字段渲染成只含合法值的下拉,必填键无合法值时提示"当前状态无合法值"。
+- **流水行内修正**:流水视图每行自带 buttons(id 取行事件 writes 首本体),行事件
+  类型的修正类型(如 RecheckJudged→JudgementOverruled)自动带 `corrects=该行
+  event_id`,点击即开预填齐全的冲正/改判表单。
+- **深链接**:`#view=V-PLAN-A3&entity=VIN-LBV0001&observer=计划员` 直达指定视图
+  与参数;切换视图/参数写回 hash,刷新/转发链接现场不丢。
 - **拦截反馈**:拦截视图(V-PKE-B4、V-DEFECT-F10)把 RejectionLog 渲染为
   分层着色卡片(L0 格式 / L1 字典 / L2 信任 / L3 规则),附候选原文。
 - **观察者 / 实体 / AS OF**:观察者下拉来自当前视图的 variants;entity 喂遍历与

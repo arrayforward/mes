@@ -1691,6 +1691,137 @@ static void test_event_type_presets() {
 }
 
 // ============================================================================
+// 26. 按钮合法选项(options 规则试探)+ 流水行内动作(corrects 随按钮下发)
+// ============================================================================
+static void test_button_options_and_flow_actions() {
+    banner("26. 按钮 options 与流水行内动作");
+    Fixture f;
+    auto has_val = [](const json& arr, const json& v) {
+        for (const json& x : arr)
+            if (x == v) return true;
+        return false;
+    };
+
+    // -- ① A3 行按钮 options:状态机试探出下一步合法状态(按值域声明序) --
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-O1", {{"车型", "SUV-A"}})));
+    drive_plan_to(f.sys, "VIN-O1", 1);  // 计划状态=01
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-O3", {{"车型", "SUV-A"}})));
+    drive_plan_to(f.sys, "VIN-O3", 3);  // 计划状态=03
+    CHECK(settled(post(f.sys, "OrderReceived", "VIN-O5", {{"车型", "SUV-A"}})));
+    drive_plan_to(f.sys, "VIN-O5", 5);  // 计划状态=05
+
+    mse::ViewParams p3;
+    p3.observer = "计划员";
+    const json a3 = f.sys.views().render("V-PLAN-A3", p3);
+    bool saw01 = false, saw03 = false, saw05 = false;
+    for (const json& row : a3["rows"]) {
+        const std::string id = row["id"].get<std::string>();
+        for (const json& btn : row["buttons"]) {
+            if (btn["type"] != "PlanReleased") continue;
+            CHECK(btn.contains("options"));
+            if (id == "VIN-O1") {
+                saw01 = true;
+                CHECK_EQ(btn["options"].at("计划状态"), json::array({"02"}));
+            } else if (id == "VIN-O3") {
+                saw03 = true;
+                const json& opts = btn["options"].at("计划状态");
+                CHECK(has_val(opts, json("04")));    // 03→04 推进
+                CHECK(has_val(opts, json("01")));    // 03→01 退回
+                CHECK(!has_val(opts, json("05")));   // 03→05 跳级非法
+            } else if (id == "VIN-O5") {
+                saw05 = true;
+                CHECK(!btn["enabled"].get<bool>());            // 05:按钮置灰
+                CHECK(btn["options"].at("计划状态").empty());  // 且无合法值
+            }
+        }
+    }
+    CHECK(saw01 && saw03 && saw05);
+
+    // 视图级 actions 也带 options(无行上下文 → enum 键取值域全量)
+    bool saw_action_opts = false;
+    for (const json& a : a3["actions"]) {
+        CHECK(a.contains("options"));
+        if (a["type"] == "PlanReleased") {
+            saw_action_opts = true;
+            CHECK_EQ(a["options"].at("计划状态"),
+                     json::array({"01", "02", "03", "04", "05"}));
+        }
+    }
+    CHECK(saw_action_opts);
+
+    // -- ② presets ⊆ options:presets 是写入的一部分,其值必在合法选项内 --
+    CHECK(settled(post(f.sys, "MaterialCallRaised", "CALL-O1",
+                       {{"呼叫状态", "呼叫中"}, {"缺料工位", "工位02"}})));
+    const json b6 = f.sys.views().render("V-CALL-B6", mse::ViewParams{});
+    bool saw_answer_opts = false;
+    for (const json& row : b6["rows"])
+        for (const json& btn : row["buttons"]) {
+            if (btn["type"] != "MaterialCallAnswered") continue;
+            saw_answer_opts = true;
+            // R-CALL-ANSWER-VAL 立法:应答只能写"已响应"(恰为 presets 值)
+            CHECK_EQ(btn["options"].at("呼叫状态"), json::array({"已响应"}));
+            CHECK_EQ(btn["presets"].at("呼叫状态"), json("已响应"));
+        }
+    CHECK(saw_answer_opts);
+
+    // -- ③ 流水行内动作:行自带 buttons,修正类型按钮带 corrects --
+    CHECK(settled(post(f.sys, "DefectRegistered", "VIN-FB1",
+                       {{"车漆", "划痕"}, {"缺陷级别", 1}}, "qc")));
+    CHECK(settled(post(f.sys, "ReworkRequested", "VIN-FB1", json::object(), "qc")));
+    CHECK(settled(post(f.sys, "ReworkRecorded", "VIN-FB1", {{"返修内容", "补漆"}}, "rw")));
+    CHECK(settled(post(f.sys, "ReworkSubmitted", "VIN-FB1", json::object(), "rw")));
+    const mse::Receipt rc = post(f.sys, "RecheckJudged", "VIN-FB1",
+                                 {{"复检结论", "OK"}}, "qc");
+    CHECK(settled(rc));
+
+    mse::ViewParams pf;
+    pf.entity = "VIN-FB1";
+    const json flow = f.sys.views().render("V-REWORK-001", pf);
+    bool saw_recheck_row = false;
+    for (const json& row : flow["rows"]) {
+        CHECK(row.contains("buttons"));  // 行自带动作(writes 非空)
+        if (row["type"] != "RecheckJudged") continue;
+        saw_recheck_row = true;
+        bool saw_overrule = false, saw_noncorr = false;
+        for (const json& btn : row["buttons"]) {
+            CHECK(btn.contains("id"));
+            CHECK_EQ(btn["id"], json("VIN-FB1"));  // 行事件 writes 的首个本体 id
+            CHECK(btn.contains("options"));
+            if (btn["type"] == "JudgementOverruled") {
+                saw_overrule = true;
+                // 行事件类型(RecheckJudged)的修正类型 → corrects = 该行 event_id
+                CHECK(btn.contains("corrects"));
+                CHECK_EQ(btn["corrects"], row["event_id"]);
+                CHECK(btn["enabled"].get<bool>());
+                // JudgementOverruled 无 presets → 空 object;无规则 → 值域全合法
+                CHECK(btn["presets"].empty());
+                CHECK_EQ(btn["options"].at("复检结论"), json::array({"OK", "NOK"}));
+            }
+            if (btn["type"] == "ReworkClosed") {
+                saw_noncorr = true;
+                CHECK(!btn.contains("corrects"));  // 非修正 emits 不带 corrects
+            }
+        }
+        CHECK(saw_overrule);
+        CHECK(saw_noncorr);
+    }
+    CHECK(saw_recheck_row);
+
+    // -- ④ 多目标类型不做 options(无单一上下文)→ 空 object --
+    CHECK(settled(post(f.sys, "OrderSwapped", "VIN-OS1", {{"序列号", 1}}, "planner")));
+    const json a2 = f.sys.views().render("V-SEQ-A2", mse::ViewParams{});
+    bool saw_swap_btn = false;
+    for (const json& row : a2["rows"])
+        for (const json& btn : row["buttons"]) {
+            if (btn["type"] != "OrderSwapped") continue;
+            saw_swap_btn = true;
+            CHECK(btn.contains("options"));
+            CHECK(btn["options"].empty());
+        }
+    CHECK(saw_swap_btn);
+}
+
+// ============================================================================
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // 崩溃时也能看到已完成的段落
     std::puts("mse 红线测试(memory 后端)");
@@ -1722,6 +1853,7 @@ int main() {
     test_async_settlement();
     test_trust_tiers();
     test_event_type_presets();
+    test_button_options_and_flow_actions();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

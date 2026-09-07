@@ -5,6 +5,7 @@
 #include "mse/view_engine.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <optional>
 #include <queue>
@@ -41,6 +42,56 @@ namespace {
 
 // 遍历视图的 BFS 深度(ViewParams 无深度字段,固定 3)
 constexpr int kTraversalDepth = 3;
+
+// ---- 按钮合法选项(options)试探 ----
+// 对某事件类型的 enum 键(字典 range 非空,有限值域;整数/浮点无限域不做),
+// 逐值构造合成候选 writes{target: presets ∪ {键:v}},走与按钮 enabled 判定
+// 完全相同的 eval_filters 路径;通过的 v 按值域声明序进 options[键]。
+// 该类型无 enum 键或多目标(无单一上下文)→ 返回空 object;
+// presets 值必含于 options(presets 是写入的一部分,缺则按值域序并入)。
+json probe_options(const DefinitionLayer& defs, RuleEngine& rules,
+                   const EventTypeEntry* te,
+                   const std::map<std::string, json>& attrs_per_target,
+                   const std::string& target_id) {
+    json options = json::object();
+    if (te == nullptr || te->multi_target) return options;
+    std::vector<std::string> keys = te->required_keys;
+    keys.insert(keys.end(), te->optional_keys.begin(), te->optional_keys.end());
+    const json& presets = te->presets;
+    for (const std::string& key : keys) {
+        const AttributeEntry* attr = defs.find_attr(key);
+        if (!attr || attr->datatype != "enum" || attr->range.empty()) continue;
+        json legal = json::array();
+        for (const json& v : attr->range) {
+            Candidate cand;
+            cand.type = te->type;
+            json writes = presets;
+            writes[key] = v;
+            cand.writes[target_id] = std::move(writes);
+            if (rules.eval_filters(te->rules, defs.rules(), attrs_per_target, cand)
+                    .empty())
+                legal.push_back(v);
+        }
+        // presets 是按钮语义自带写入:其值必在合法选项内(试探漏掉则按声明序并入)
+        if (presets.contains(key)) {
+            const json& pv = presets.at(key);
+            bool found = false;
+            for (const json& v : legal)
+                if (v == pv) { found = true; break; }
+            if (!found) {
+                std::size_t pos = 0;  // 插入位:按值域声明序归位,未知值排最前
+                for (const json& rv : attr->range) {
+                    if (rv == pv) break;
+                    ++pos;
+                }
+                if (pos > legal.size()) pos = 0;
+                legal.insert(legal.begin() + static_cast<std::ptrdiff_t>(pos), pv);
+            }
+        }
+        options[key] = std::move(legal);
+    }
+    return options;
+}
 
 // 一条遍历边:{from, key, to, source_event};按 (from,key,to) 字典序去重排序
 using EdgeKey = std::tuple<std::string, std::string, std::string>;
@@ -269,10 +320,30 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
                 cand.writes[id] = presets;
                 std::vector<std::string> reasons =
                     rules_.eval_filters(refs, defs_.rules(), attrs_per_target, cand);
+                // 合法选项:对每个 enum 键逐值试探(与 enabled 同一 eval_filters
+                // 路径);无 enum 键/多目标类型 → 空 object
+                const json options =
+                    probe_options(defs_, rules_, te, attrs_per_target, id);
+                // enabled 口径:有试探键(enum 写入)时,enabled ⟺ 每个试探键都
+                // 存在合法值(存在性语义——"界面上能点的 ⇔ 系统能结算的";
+                // 空写入求值对"值待用户从 options 选"的按钮会误灰);
+                // 无试探键时维持 presets 候选的求值结果
+                bool enabled = reasons.empty();
+                if (!options.empty()) {
+                    enabled = true;
+                    reasons.clear();
+                    for (const auto& [k, vals] : options.items()) {
+                        if (vals.empty()) {
+                            enabled = false;
+                            reasons.push_back("当前状态无合法值: " + k);
+                        }
+                    }
+                }
                 buttons.push_back({{"type", t},
-                                   {"enabled", reasons.empty()},
+                                   {"enabled", enabled},
                                    {"reasons", reasons},
-                                   {"presets", presets}});
+                                   {"presets", presets},
+                                   {"options", options}});
             }
             row["buttons"] = std::move(buttons);
             rows.push_back(std::move(row));
@@ -280,7 +351,11 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
         return rows;
     };
 
-    // 流水:行 = 事件;fold=="L1" 排除修正,"L1+L2" 全含
+    // 流水:行 = 事件;fold=="L1" 排除修正,"L1+L2" 全含。
+    // 每行自带动作按钮(行内修正/发起):对(variant 过滤后的)emits 每类型一个,
+    // id 取该行事件 writes 的第一个本体 id;emit 类型恰为该行事件类型的修正
+    // 类型时带 corrects(= 该行 event_id),H5 据此发起冲正/改判;
+    // enabled/options 与终态行按钮同一 eval_filters 路径(属性取 AS OF 投影)。
     auto build_flow_rows = [&]() -> json {
         json rows = json::array();
         const bool l1_only = view->queries.fold != "L1+L2";
@@ -295,6 +370,53 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
             row["writes"] = e.writes;
             row["corrects"] = e.corrects ? json(*e.corrects) : json(nullptr);
             row["is_correction"] = e.corrects.has_value();
+
+            if (!e.writes.empty()) {
+                const std::string& target = e.writes.begin()->first;
+                const json attrs = proj.attrs_of(target);
+                const std::map<std::string, json> attrs_per_target{{target, attrs}};
+                const EventTypeEntry* row_te = defs_.find_event_type(e.type);
+                const std::string correction_of_row =
+                    row_te ? row_te->correction : std::string{};
+                json buttons = json::array();
+                for (const std::string& t : emits) {
+                    const EventTypeEntry* te = defs_.find_event_type(t);
+                    const json presets = te ? te->presets : json::object();
+                    const std::vector<std::string> refs =
+                        te ? te->rules : std::vector<std::string>{};
+                    Candidate cand;
+                    cand.type = t;
+                    cand.writes[target] = presets;
+                    if (!correction_of_row.empty() && t == correction_of_row)
+                        cand.corrects = e.event_id;  // 试探候选保持真实形状
+                    std::vector<std::string> reasons =
+                        rules_.eval_filters(refs, defs_.rules(), attrs_per_target, cand);
+                    json options = probe_options(defs_, rules_, te,
+                                                 attrs_per_target, target);
+                    // enabled 口径与终态行一致:有试探键时按存在性(每键有合法值)
+                    bool enabled = reasons.empty();
+                    if (!options.empty()) {
+                        enabled = true;
+                        reasons.clear();
+                        for (const auto& [k, vals] : options.items()) {
+                            if (vals.empty()) {
+                                enabled = false;
+                                reasons.push_back("当前状态无合法值: " + k);
+                            }
+                        }
+                    }
+                    json btn{{"type", t},
+                             {"enabled", enabled},
+                             {"reasons", reasons},
+                             {"presets", presets},
+                             {"id", target},
+                             {"options", std::move(options)}};
+                    if (!correction_of_row.empty() && t == correction_of_row)
+                        btn["corrects"] = e.event_id;
+                    buttons.push_back(std::move(btn));
+                }
+                row["buttons"] = std::move(buttons);
+            }
             rows.push_back(std::move(row));
         }
         return rows;
@@ -329,12 +451,27 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
         out["rejections"] = std::move(rejections);
     }
 
-    // 视图级 actions:仅列可发起类型(行级可用性在 buttons);presets 随动作携带
+    // 视图级 actions:仅列可发起类型(行级可用性在 buttons);presets 随动作携带。
+    // options 无行上下文可试探,取 enum 键的字典声明值域全量(声明序);
+    // 无 enum 键/多目标类型 → 空 object。
     json actions = json::array();
     for (const std::string& t : emits) {
         const EventTypeEntry* te = defs_.find_event_type(t);
-        actions.push_back(
-            {{"type", t}, {"presets", te ? te->presets : json::object()}});
+        json options = json::object();
+        if (te && !te->multi_target) {
+            std::vector<std::string> keys = te->required_keys;
+            keys.insert(keys.end(), te->optional_keys.begin(),
+                        te->optional_keys.end());
+            for (const std::string& key : keys) {
+                const AttributeEntry* attr = defs_.find_attr(key);
+                if (!attr || attr->datatype != "enum" || attr->range.empty())
+                    continue;
+                options[key] = attr->range;
+            }
+        }
+        actions.push_back({{"type", t},
+                           {"presets", te ? te->presets : json::object()},
+                           {"options", std::move(options)}});
     }
     out["actions"] = std::move(actions);
 

@@ -51,6 +51,27 @@
     if (typeof space === 'string') return space;
     return space.anchor || space.raw_text || '';
   }
+  /* 深链接:#view=V-PLAN-A3&entity=VIN-LBV0001&observer=计划员(&t=seq) */
+  function parseHash() {
+    const h = (window.location.hash || '').replace(/^#/, '');
+    const out = {};
+    h.split('&').forEach(function (kv) {
+      if (!kv) return;
+      const i = kv.indexOf('=');
+      const k = i < 0 ? kv : kv.slice(0, i);
+      const v = i < 0 ? '' : kv.slice(i + 1);
+      try { out[decodeURIComponent(k)] = decodeURIComponent(v); } catch (e) { out[k] = v; }
+    });
+    return out;
+  }
+  function buildHash(view, entity, observer, asOf) {
+    const parts = [];
+    if (view) parts.push('view=' + encodeURIComponent(view));
+    if (entity) parts.push('entity=' + encodeURIComponent(entity));
+    if (observer) parts.push('observer=' + encodeURIComponent(observer));
+    if (asOf !== '' && asOf !== undefined && asOf !== null) parts.push('t=' + encodeURIComponent(asOf));
+    return parts.length ? '#' + parts.join('&') : '#';
+  }
   const LAYER_NAMES = { 0: 'L0 格式', 1: 'L1 字典', 2: 'L2 信任', 3: 'L3 规则' };
 
   /* ================= Toast ================= */
@@ -119,7 +140,7 @@
               ${btns.map(function (b, j) {
                 const title = b.enabled ? b.type : (b.reasons || []).join('; ');
                 return html`<button key=${j} class="btn row-btn" disabled=${!b.enabled} title=${title}
-                  onClick=${function () { props.onAction(b.type, r.id); }}>${b.type}</button>`;
+                  onClick=${function () { props.onAction(b.type, r.id, b); }}>${b.type}</button>`;
               })}
             </td>
           </tr>`;
@@ -134,10 +155,10 @@
     const rows = data.rows || [];
     return html`<table class="grid">
       <thead><tr>
-        <th>#</th><th>类型</th><th>actor</th><th>occur_time</th><th>位置</th><th>writes</th><th>corrects</th>
+        <th>#</th><th>类型</th><th>actor</th><th>occur_time</th><th>位置</th><th>writes</th><th>corrects</th><th>操作</th>
       </tr></thead>
       <tbody>
-        ${rows.length === 0 && html`<tr><td colspan="7" class="muted">(空)</td></tr>`}
+        ${rows.length === 0 && html`<tr><td colspan="8" class="muted">(空)</td></tr>`}
         ${rows.map(function (r, i) {
           const eid = 'flow-evt-' + r.event_id;
           const hl = props.highlightId === r.event_id;
@@ -150,6 +171,15 @@
             <td>${spaceText(r.space)}</td>
             <td><div class="cell-val" title=${writesSummary(r.writes)}>${writesSummary(r.writes)}</div></td>
             <td>${r.corrects ? html`<a class="link" onClick=${function () { props.onJump(r.corrects); }}>#${r.corrects}</a>` : ''}</td>
+            <td>
+              ${(r.buttons || []).map(function (b, j) {
+                // 行内动作(小号):enabled/title 逻辑同终态行按钮;点击开表单,
+                // 预填 presets + id + corrects(修正类型由服务端标注)
+                const title = b.enabled ? b.type : (b.reasons || []).join('; ');
+                return html`<button key=${j} class="btn row-btn" disabled=${!b.enabled} title=${title}
+                  onClick=${function () { props.onFlowAction(b); }}>${b.type}</button>`;
+              })}
+            </td>
           </tr>`;
         })}
       </tbody>
@@ -254,7 +284,8 @@
     </div>`;
     let body = null;
     if (d.render_mode === '流水') {
-      body = html`<${FlowView} data=${d} highlightId=${props.highlightId} onJump=${props.onJump} />`;
+      body = html`<${FlowView} data=${d} highlightId=${props.highlightId} onJump=${props.onJump}
+        onFlowAction=${props.onFlowAction} />`;
     } else if (d.render_mode === '拦截') {
       body = html`<${InterceptView} data=${d} onAction=${props.onAction} />`;
     } else if (d.render_mode === '遍历') {
@@ -273,9 +304,13 @@
     const val = props.value;
     const set = props.onChange;
     const err = props.error;
+    // options:服务端按行上下文试探出的合法值(enum 键)。非空数组 → 只含合法值的
+    // select;空数组且必填 → 提示"当前状态无合法值";键不在 options 里 → 不干预。
+    const hasOptions = Array.isArray(f.options);
+    const noLegal = hasOptions && f.options.length === 0 && !!f.required;
     let ctrl = null;
-    if (f.datatype === 'enum') {
-      let opts = f.range;
+    if (f.datatype === 'enum' || hasOptions) {
+      let opts = hasOptions ? f.options : f.range;
       if (typeof opts === 'string') opts = opts.split(/[|,]/).map(function (s) { return s.trim(); }).filter(Boolean);
       if (!Array.isArray(opts)) opts = [];
       ctrl = html`<select value=${val === undefined ? '' : val}
@@ -305,16 +340,23 @@
       ctrl = html`<input type="text" value=${val === undefined ? '' : val}
         onChange=${function (e) { set(e.target.value); }} />`;
     }
-    return html`<div class="ctrl">${ctrl}${err && html`<div class="field-err">${err}</div>`}</div>`;
+    return html`<div class="ctrl">${ctrl}
+      ${noLegal && html`<div class="field-err">当前状态无合法值</div>`}
+      ${err && html`<div class="field-err">${err}</div>`}</div>`;
   }
 
   function EventFormModal(props) {
     const types = props.eventTypes || [];
     const attrMap = props.attrMap || {};
     const prefill = props.prefill || {};
-    /* 类型预置值(presets):按钮/动作的语义自带写入,打开表单时写入初值;
-       字段控件照常可改(用户可改,写侧规则兜底) */
+    /* 预填统一:presets(按钮/动作的语义自带写入;按钮携带的 prefill.presets
+       优先,回退类型注册表的 presets)+ id + corrects(行内修正)+ space
+       (视图 queries.spacetime 非空时预填该锚点)。字段控件照常可改(用户可改,
+       写侧规则兜底) */
     function presetsOf(name) {
+      if (name && name === prefill.type && prefill.presets && typeof prefill.presets === 'object') {
+        return prefill.presets;
+      }
       const t = types.find(function (x) { return x.type === name; });
       return (t && t.presets) || {};
     }
@@ -330,10 +372,10 @@
       const init = {
         id: prefill.id !== undefined ? String(prefill.id) : '',
         actor: 'ui-user',
-        space: '',
+        space: prefill.space || props.viewSpace || '',
         space_custom: '',
         time: new Date().toISOString(),
-        corrects: '',
+        corrects: (prefill.corrects !== undefined && prefill.corrects !== null) ? String(prefill.corrects) : '',
         evidence: '',
         idempotency_key: ''
       };
@@ -353,6 +395,9 @@
       const req = typeDef.required_keys || [];
       const opt = typeDef.optional_keys || [];
       const presets = typeDef.presets || {};
+      // 按钮携带的 options 只对打开时的类型有效(切换类型后无行上下文,不套用)
+      const preOpts = (prefill.type === typeName && prefill.options && typeof prefill.options === 'object')
+        ? prefill.options : {};
       const all = req.concat(opt).filter(function (k) { return SYS_KEYS.indexOf(k) < 0; });
       return all.filter(function (k, i) { return all.indexOf(k) === i; }).map(function (k) {
         const a = attrMap[k] || {};
@@ -363,7 +408,8 @@
           range: a.range,
           semantic: a.semantic,
           required: req.indexOf(k) >= 0,
-          preset: Object.prototype.hasOwnProperty.call(presets, k)
+          preset: Object.prototype.hasOwnProperty.call(presets, k),
+          options: Object.prototype.hasOwnProperty.call(preOpts, k) ? preOpts[k] : undefined
         };
       });
     }, [typeDef, attrMap]);
@@ -622,10 +668,19 @@
     const [attrMap, setAttrMap] = useState({});
     const [anchors, setAnchors] = useState([]);
     const [ontologies, setOntologies] = useState([]);
-    const [selectedView, setSelectedView] = useState(null);
-    const [observer, setObserver] = useState('');
-    const [entity, setEntity] = useState('');
-    const [asOf, setAsOf] = useState('');
+    // 深链接:加载时解析 hash 选中视图与参数(encodeURIComponent 编码)
+    const [selectedView, setSelectedView] = useState(function () {
+      return parseHash().view || null;
+    });
+    const [observer, setObserver] = useState(function () {
+      return parseHash().observer || '';
+    });
+    const [entity, setEntity] = useState(function () {
+      return parseHash().entity || '';
+    });
+    const [asOf, setAsOf] = useState(function () {
+      return parseHash().t || '';
+    });
     const [token, setToken] = useState(function () {
       try { return localStorage.getItem('mse-token') || 'ui-token'; } catch (e) { return 'ui-token'; }
     });
@@ -704,7 +759,17 @@
       } catch (e) { toast('err', '落账失败: ' + e.message); }
     }
 
-    function onAction(type, id) { setModal({ type: type, id: id }); }
+    // 行内/行级按钮:带上按钮的 presets/options(该行的合法选项上下文)开表单
+    function onAction(type, id, btn) {
+      setModal({ type: type, id: id,
+                 presets: btn && btn.presets, options: btn && btn.options });
+    }
+    // 流水行内动作:id 与 corrects(修正类型)由服务端随按钮下发
+    function onFlowAction(btn) {
+      setModal({ type: btn.type, id: btn.id,
+                 presets: btn.presets, options: btn.options,
+                 corrects: btn.corrects });
+    }
 
     function onJump(eventId) {
       setHighlightId(eventId);
@@ -719,8 +784,33 @@
       return (views || []).find(function (v) { return v.view_id === selectedView; }) || null;
     }, [views, selectedView]);
 
-    /* 切换视图时重置 observer(角色属于视图 variants) */
-    useEffect(function () { setObserver(''); }, [selectedView]);
+    /* 切换视图时重置 observer(角色属于视图 variants);深链接进入/写回不算切换 */
+    const lastViewRef = useRef(selectedView);
+    useEffect(function () {
+      if (lastViewRef.current === selectedView) return;
+      lastViewRef.current = selectedView;
+      setObserver('');
+    }, [selectedView]);
+
+    /* 深链接写回:视图/参数变化时同步 hash(replaceState,不刷历史、不触发
+       hashchange);hashchange(手改/前进后退)→ 解析回状态 */
+    useEffect(function () {
+      const h = buildHash(selectedView, entity, observer, asOf);
+      if (window.location.hash !== h) {
+        history.replaceState(null, '', window.location.pathname + window.location.search + h);
+      }
+    }, [selectedView, entity, observer, asOf]);
+    useEffect(function () {
+      function onHash() {
+        const p = parseHash();
+        if (p.view) { lastViewRef.current = p.view; setSelectedView(p.view); }
+        if (p.entity !== undefined) setEntity(p.entity);
+        if (p.observer !== undefined) setObserver(p.observer);
+        if (p.t !== undefined) setAsOf(p.t);
+      }
+      window.addEventListener('hashchange', onHash);
+      return function () { window.removeEventListener('hashchange', onHash); };
+    }, []);
 
     /* 持久化 token */
     useEffect(function () {
@@ -749,13 +839,14 @@
             data=${viewData} error=${viewErr} loading=${loading}
             entity=${entity}
             highlightId=${highlightId} onJump=${onJump}
-            onAction=${onAction} onWalk=${onWalk} />
+            onAction=${onAction} onFlowAction=${onFlowAction} onWalk=${onWalk} />
         </div>
         <${EventSidebar} events=${events} collapsed=${collapsed}
           onToggle=${function () { setCollapsed(!collapsed); }} />
       </div>
       ${modal && html`<${EventFormModal}
         prefill=${modal}
+        viewSpace=${(currentViewMeta && currentViewMeta.queries && currentViewMeta.queries.spacetime) || ''}
         eventTypes=${eventTypes} attrMap=${attrMap}
         anchors=${anchors} token=${token}
         toast=${toast}

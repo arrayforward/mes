@@ -747,7 +747,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
                      {"fold", "L1+L2"}}},
         {"selects", {"过点区域"}},
         {"rules", json::array()},
-        {"emits", {"VehicleEnteredZone", "VehicleExitedZone"}},
+        {"emits", {"VehicleEnteredZone", "VehicleExitedZone", "PassageCorrected"}},
         {"render_mode", "流水"}});
     // C3 区域跟踪(终态·时空切片:总装车间)。
     reg_view(defs, {
@@ -779,7 +779,7 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"rules", json::array()},
         {"emits", {"ProductionReported"}},
         {"render_mode", "终态"}});
-    // D3 呼叫与停线记录(流水)。
+    // D3 呼叫与停线记录(流水;emits 含 CallCancelled:流水行内可发起冲正)。
     reg_view(defs, {
         {"view_id", "V-CALLLOG-D3"},
         {"queries", {{"events", {"CallRaised", "CallAcknowledged", "CallCancelled",
@@ -787,7 +787,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
                      {"fold", "L1"}}},
         {"selects", {"呼叫类型", "呼叫状态", "线状态", "停线原因"}},
         {"rules", json::array()},
-        {"emits", {"CallRaised", "CallAcknowledged", "LineStopped", "LineResumed"}},
+        {"emits", {"CallRaised", "CallAcknowledged", "CallCancelled",
+                    "LineStopped", "LineResumed"}},
         {"render_mode", "流水"}});
 
     // ============ E PMC ============
@@ -897,7 +898,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         {"rules", json::array()},
         {"emits", {"DefectRegistered"}},
         {"render_mode", "拦截"}});
-    // F11 返修流程(既有,流水 + 角色变体)。
+    // F11 返修流程(既有,流水 + 角色变体;emits 含 JudgementOverruled/
+    // ReworkCancelled:流水行内可发起改判/撤销冲正)。
     reg_view(defs, {
         {"view_id", "V-REWORK-001"},
         {"queries", {{"events", {"DefectRegistered", "DefectCancelled",
@@ -906,8 +908,9 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
                      {"fold", "L1+L2"}}},
         {"selects", {"车型", "车漆", "返修内容", "复检结论"}},
         {"rules", json::array()},
-        {"emits", {"ReworkRequested", "ReworkRecorded", "ReworkSubmitted",
-                    "RecheckJudged", "ReworkClosed"}},
+        {"emits", {"ReworkRequested", "ReworkCancelled", "ReworkRecorded",
+                    "ReworkSubmitted", "RecheckJudged", "JudgementOverruled",
+                    "ReworkClosed"}},
         {"render_mode", "流水"},
         {"variants", {{"返修工", {{"columns", {"车型", "返修内容"}},
                                  {"emits", {"ReworkRecorded", "ReworkSubmitted"}}}},
