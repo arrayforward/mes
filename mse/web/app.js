@@ -357,10 +357,18 @@
     const types = props.eventTypes || [];
     const attrMap = props.attrMap || {};
     const prefill = props.prefill || {};
-    /* 预填统一:presets(按钮/动作的语义自带写入;按钮携带的 prefill.presets
-       优先,回退类型注册表的 presets)+ id + corrects(行内修正)+ space
-       (视图 queries.spacetime 非空时预填该锚点)。字段控件照常可改(用户可改,
-       写侧规则兜底) */
+    /* 预填统一:context(行上已有的属性值,按钮随视图下发)→ presets(语义自带
+       写入,覆盖 context;按钮携带的 prefill.presets 优先,回退类型注册表的
+       presets)+ id + corrects(行内修正)+ space(视图 queries.spacetime 非空时
+       预填该锚点)。字段控件照常可改(用户可改,写侧规则兜底) */
+    function applyContext(obj) {
+      const ctx = prefill.context;
+      if (!ctx || typeof ctx !== 'object') return;
+      Object.keys(ctx).forEach(function (k) {
+        const v = ctx[k];
+        obj[k] = (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
+      });
+    }
     function presetsOf(name) {
       if (name && name === prefill.type && prefill.presets && typeof prefill.presets === 'object') {
         return prefill.presets;
@@ -387,6 +395,7 @@
         evidence: '',
         idempotency_key: ''
       };
+      applyContext(init);
       applyPresets(init, prefill.type || (types[0] && types[0].type) || '');
       return init;
     });
@@ -774,15 +783,18 @@
       } catch (e) { toast('err', '落账失败: ' + e.message); }
     }
 
-    // 行内/行级按钮:带上按钮的 presets/options(该行的合法选项上下文)开表单
+    // 行内/行级按钮:带上按钮的 presets/options/context(该行的合法选项与已知
+    // 属性值上下文)开表单——行上已有的值(物料编号/批次号/拉动类型…)不用重填
     function onAction(type, id, btn) {
       setModal({ type: type, id: id,
-                 presets: btn && btn.presets, options: btn && btn.options });
+                 presets: btn && btn.presets, options: btn && btn.options,
+                 context: btn && btn.context });
     }
     // 流水行内动作:id 与 corrects(修正类型)由服务端随按钮下发
     function onFlowAction(btn) {
       setModal({ type: btn.type, id: btn.id,
                  presets: btn.presets, options: btn.options,
+                 context: btn.context,
                  corrects: btn.corrects });
     }
 

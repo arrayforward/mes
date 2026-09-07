@@ -55,6 +55,25 @@ json merged_presets(const ViewEntry& view, const std::string& type,
     return presets;
 }
 
+// ---- 行上下文预填(context) ----
+// 该事件类型要写的键中,行本体当前已有值的键(presets 键除外——presets 是
+// 语义自带写入,盖过现状值;系统键除外)。随行按钮下发,H5 表单据此预填:
+// 点"发货"时物料编号/批次号/拉动类型等行上已知的值不用重填。
+json context_for(const EventTypeEntry* te, const json& presets, const json& attrs) {
+    json ctx = json::object();
+    if (te == nullptr || !attrs.is_object()) return ctx;
+    static const std::set<std::string> kSys = {"id", "type", "actor", "space", "time",
+                                               "evidence", "corrects", "idempotency_key",
+                                               "writes"};
+    std::vector<std::string> keys = te->required_keys;
+    keys.insert(keys.end(), te->optional_keys.begin(), te->optional_keys.end());
+    for (const std::string& k : keys) {
+        if (kSys.count(k) || presets.contains(k)) continue;
+        if (attrs.contains(k) && !attrs[k].is_null()) ctx[k] = attrs[k];
+    }
+    return ctx;
+}
+
 // ---- 按钮合法选项(options)试探 ----
 // 对某事件类型的 enum 键(字典 range 非空,有限值域;整数/浮点无限域不做),
 // 逐值构造合成候选 writes{target: presets ∪ {键:v}},走与按钮 enabled 判定
@@ -357,7 +376,8 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
                                    {"enabled", enabled},
                                    {"reasons", reasons},
                                    {"presets", presets},
-                                   {"options", options}});
+                                   {"options", options},
+                                   {"context", context_for(te, presets, attrs)}});
             }
             row["buttons"] = std::move(buttons);
             rows.push_back(std::move(row));
@@ -424,7 +444,8 @@ json ViewEngine::render(const std::string& view_id, const ViewParams& params) co
                              {"reasons", reasons},
                              {"presets", presets},
                              {"id", target},
-                             {"options", std::move(options)}};
+                             {"options", std::move(options)},
+                             {"context", context_for(te, presets, attrs)}};
                     if (!correction_of_row.empty() && t == correction_of_row)
                         btn["corrects"] = e.event_id;
                     buttons.push_back(std::move(btn));

@@ -1987,6 +1987,45 @@ static void test_view_emit_presets() {
 }
 
 // ============================================================================
+// ============================================================================
+// 31. 按钮 context:行上已有属性值随按钮下发(presets 优先)
+// ============================================================================
+static void test_button_context() {
+    banner("31. 按钮 context:行上已有属性值随按钮下发(presets 优先)");
+    Fixture f;
+
+    CHECK(settled(post(f.sys, "PullOrderCreated", "PO-CTX-1",
+                       {{"拉动类型", "Kanban"}, {"拉动状态", "已创建"},
+                        {"物料编号", "MAT-1001"}},
+                       "logistics")));
+    const json v = f.sys.views().render("V-KANBAN-B7", mse::ViewParams{});
+    // 终态行的 PullOrderCreated 按钮:context 带行已知的 物料编号;
+    // presets 键(拉动状态/拉动类型)不进 context(presets 优先);系统键不进
+    const json* btn = nullptr;
+    for (const json& row : v["rows"])
+        for (const json& b : row["buttons"])
+            if (row["id"] == "PO-CTX-1" && b["type"] == "PullOrderCreated") btn = &b;
+    CHECK(btn != nullptr);
+    if (btn == nullptr) return;
+    CHECK_EQ((*btn)["context"].at("物料编号"), json("MAT-1001"));
+    CHECK(!(*btn)["context"].contains("拉动状态"));
+    CHECK(!(*btn)["context"].contains("拉动类型"));
+    CHECK(!(*btn)["context"].contains("actor"));
+
+    // 流水行行内按钮同样带 context 字段
+    CHECK(settled(post(f.sys, "VehicleEnteredZone", "VIN-CTX-1",
+                       {{"过点区域", "工位01"}}, "avi",
+                       "整车厂/总装车间/总装线/工位01")));
+    const json fl = f.sys.views().render("V-TRACK-C2", mse::ViewParams{});
+    bool saw_btn = false;
+    for (const json& row : fl["rows"])
+        for (const json& b : row.value("buttons", json::array())) {
+            CHECK(b.contains("context"));
+            saw_btn = true;
+        }
+    CHECK(saw_btn);
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);  // 崩溃时也能看到已完成的段落
     std::puts("mse 红线测试(memory 后端)");
@@ -2020,6 +2059,7 @@ int main() {
     test_event_type_presets();
     test_button_options_and_flow_actions();
     test_view_emit_presets();
+    test_button_context();
     std::printf("----\nchecks=%d failures=%d\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
