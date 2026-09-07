@@ -214,7 +214,15 @@
   function TraverseView(props) {
     const data = props.data;
     if (!props.entity) {
-      return html`<div class="hint">遍历视图需要 entity 参数:请在顶部工具条填写实体 ID 后刷新。</div>`;
+      // 参数引导(不是错误):给常用本体的快捷选择,点击即下钻
+      const chips = (props.ontologies || []).slice(0, 12);
+      return html`<div class="hint">
+        <div style=${{ marginBottom: '8px' }}>遍历视图需要一个起点本体:在顶部 entity 输入框填写,或点击下面任一 id 直接下钻。</div>
+        ${chips.map(function (o) {
+          return html`<button key=${o.id} class="btn" style=${{ marginRight: '6px', marginBottom: '6px' }}
+            onClick=${function () { props.onWalk(o.id); }}>${o.id}</button>`;
+        })}
+      </div>`;
     }
     const nodes = data.nodes || [];
     const edges = data.edges || [];
@@ -275,7 +283,7 @@
     if (props.loading) return html`<div class="loading">加载中…</div>`;
     if (props.error) return html`<div class="err-box">${props.error}</div>`;
     if (!d) return html`<div class="muted">请选择左侧视图</div>`;
-    if (d.error) return html`<div class="err-box">视图错误:${d.error}</div>`;
+    if (d.error) return html`<div class="hint">⚠ ${d.error}</div>`;
     const head = html`<div class="view-head">
       <h3 class="mono">${d.view_id || props.viewId}</h3>
       <span class="tag">${d.render_mode || ''}</span>
@@ -289,7 +297,7 @@
     } else if (d.render_mode === '拦截') {
       body = html`<${InterceptView} data=${d} onAction=${props.onAction} />`;
     } else if (d.render_mode === '遍历') {
-      body = html`<${TraverseView} data=${d} entity=${props.entity} onWalk=${props.onWalk} />`;
+      body = html`<${TraverseView} data=${d} entity=${props.entity} onWalk=${props.onWalk} ontologies=${props.ontologies} />`;
     } else {
       body = html`<${TerminalTable} data=${d} onAction=${props.onAction} />`;
     }
@@ -728,6 +736,13 @@
 
     const loadView = useCallback(function () {
       if (!selectedView) { setViewData(null); return; }
+      // 遍历视图缺 entity 时不发请求(后端会回 error):本地直接渲染参数引导
+      const meta = (views || []).find(function (v) { return v.view_id === selectedView; });
+      if (meta && meta.render_mode === '遍历' && !entity) {
+        setViewErr(null); setLoading(false);
+        setViewData({ view_id: selectedView, render_mode: '遍历', nodes: [], edges: [] });
+        return;
+      }
       const q = [];
       if (observer) q.push('observer=' + encodeURIComponent(observer));
       if (entity) q.push('entity=' + encodeURIComponent(entity));
@@ -737,7 +752,7 @@
       api('/views/' + encodeURIComponent(selectedView) + (q.length ? '?' + q.join('&') : ''))
         .then(function (d) { setViewData(d); setLoading(false); })
         .catch(function (e) { setViewErr(e.message); setLoading(false); });
-    }, [selectedView, observer, entity, asOf]);
+    }, [selectedView, observer, entity, asOf, views]);
 
     useEffect(function () { loadView(); }, [loadView]);
     useEffect(function () { loadEvents(); }, [loadEvents]);
@@ -838,6 +853,7 @@
             viewId=${selectedView}
             data=${viewData} error=${viewErr} loading=${loading}
             entity=${entity}
+            ontologies=${ontologies}
             highlightId=${highlightId} onJump=${onJump}
             onAction=${onAction} onFlowAction=${onFlowAction} onWalk=${onWalk} />
         </div>
