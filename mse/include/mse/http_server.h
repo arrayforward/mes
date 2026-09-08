@@ -29,6 +29,7 @@ struct HttpResponse {
     int         status = 200;
     std::string content_type = "application/json; charset=utf-8";
     std::string body;
+    std::map<std::string, std::string> headers = {};  // 附加响应头(如 Cache-Control)
 };
 
 class HttpServer {

@@ -125,7 +125,11 @@ mse::HttpResponse serve_static(const std::filesystem::path& web_root,
                                  "{\"error\":\"not found\"}"};
     std::ostringstream body;
     body << in.rdbuf();
-    return mse::HttpResponse{200, content_type_of(target), body.str()};
+    mse::HttpResponse resp{200, content_type_of(target), body.str()};
+    // 界面资源禁缓存:本地验证台迭代频繁,陈旧 app.js 会让浏览器跑旧逻辑
+    // (服务器无 ETag/304,no-cache 使浏览器每次回源重取)
+    resp.headers["Cache-Control"] = "no-cache";
+    return resp;
 }
 
 json not_found() { return json{{"error", "not found"}}; }

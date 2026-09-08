@@ -195,11 +195,12 @@ void handle_connection(socket_t conn, const HttpServer::Handler& handler) {
         resp.body = "{\"error\":\"internal error\"}";
     }
 
-    const std::string out = "HTTP/1.1 " + std::to_string(resp.status) + " " +
-                            reason_phrase(resp.status) +
-                            "\r\nContent-Type: " + resp.content_type +
-                            "\r\nContent-Length: " + std::to_string(resp.body.size()) +
-                            "\r\nConnection: close\r\n\r\n" + resp.body;
+    std::string out = "HTTP/1.1 " + std::to_string(resp.status) + " " +
+                      reason_phrase(resp.status) +
+                      "\r\nContent-Type: " + resp.content_type +
+                      "\r\nContent-Length: " + std::to_string(resp.body.size());
+    for (const auto& [k, v] : resp.headers) out += "\r\n" + k + ": " + v;
+    out += "\r\nConnection: close\r\n\r\n" + resp.body;
     send_all(conn, out.data(), out.size());
     close_socket(conn);
 }
