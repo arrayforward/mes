@@ -4,71 +4,20 @@
 # mse/tools/ui_playbook.py —— 《H5业务流模拟操作手册》的可执行版本
 #
 # 按手册剧本逐幕驱动真实 mse_server(与 H5 界面发同一批 HTTP 请求),
-# 逐步校验手册里的预期结果。用法:
+# 逐步校验手册里的预期结果。帮助函数/计数来自公共库 playbook_lib。
+#
+# 本剧本依赖演示背景数据(BOM@工位01、批次绑定等),不打自管理服务器:
 #   1) 删库重启 mse_server(出厂状态)
 #   2) mse_demo --server 127.0.0.1:18080   (灌入"昨日"背景数据)
 #   3) python mse/tools/ui_playbook.py [host:port]
-# 退出码 0 = 剧本全部符合预期。
+# 退出码 0 = 剧本全部符合预期。自管理剧本见 pb2~pb5(自建 Server、自造数据)。
 # ============================================================================
-import json, sys, urllib.request, urllib.parse
+import json, sys
+from playbook_lib import (set_base, api, post, view, row_of, btn_of,
+                          events_of, check, banner, summary)
 
-HOST = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1:18080"
-BASE = "http://" + HOST
-TOKEN = "ui-token"
-
-g_checks = 0
-g_fails = 0
-
-def check(ok, label, detail=""):
-    global g_checks, g_fails
-    g_checks += 1
-    if ok:
-        print(f"  [OK] {label}")
-    else:
-        g_fails += 1
-        print(f"  [FAIL] {label}  {detail}")
-
-def api(method, path, body=None, token=TOKEN):
-    data = None
-    if body is not None:
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(BASE + path, data=data, method=method)
-    if body is not None:
-        req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("X-MSE-Token", token)
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-def post(type_, id_, kvs, actor, space=None, expect="settled", token=TOKEN, **syskeys):
-    payload = {"type": type_, "id": id_, "actor": actor, **kvs}
-    if space:
-        payload["space"] = space
-    payload.update(syskeys)
-    return api("POST", "/events", payload, token)
-
-def view(vid, **params):
-    q = urllib.parse.urlencode(params)
-    return api("GET", f"/views/{urllib.parse.quote(vid)}" + ("?" + q if q else ""))
-
-def row_of(v, rid):
-    for r in v.get("rows", []):
-        if r.get("id") == rid:
-            return r
-    return None
-
-def btn_of(row, type_):
-    for b in (row or {}).get("buttons", []):
-        if b["type"] == type_:
-            return b
-    return None
-
-def events_of(type_):
-    return [e for e in api("GET", "/meta/events?limit=500") if e["type"] == type_]
-
-print("=" * 62)
-print(f"H5 业务流剧本验证 → {BASE}")
-print("=" * 62)
+set_base(sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1:18080")
+banner("H5 业务流剧本验证")
 
 # ---- 第一幕 早会接单与排产 ------------------------------------------------
 print("\n[第一幕] 早会接单与排产")
@@ -264,7 +213,4 @@ r2 = post("MaterialCallRaised", "CALL-2001", {"呼叫状态": "呼叫中", "缺�
 check(r1.get("event_id") == r2.get("event_id") and r2["status"] == "settled",
       "7.x 幂等:重复提交返回原 event_id,日志不增")
 
-print("\n" + "=" * 62)
-print(f"剧本验证:checks={g_checks} fails={g_fails}")
-print("=" * 62)
-sys.exit(0 if g_fails == 0 else 1)
+summary()

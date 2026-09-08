@@ -169,7 +169,8 @@ void load_auto_plant_seeds(DefinitionLayer& defs) {
         "integer", "", {}, {"SequenceAdjusted", "SequenceAdjustReversed", "OrderInserted"}));
     reg_attr(defs, attr_payload("订单状态", "生产订单接收状态:接收/取消",
         "enum", "", {"接收", "取消"},
-        {"OrderReceived", "OrderRevoked", "OrderReReceived", "OrderCancelled", "OrderCancelReversed"}));
+        {"OrderReceived", "OrderRevoked", "OrderReReceived", "OrderCancelled",
+         "OrderCancelReversed", "OrderRevokeReversed"}));
     reg_attr(defs, attr_payload("冻结状态", "排序冻结:已冻结订单禁止调序/换单",
         "enum", "", {"未冻结", "已冻结"}, {"OrderFrozen", "OrderFreezeReversed"}));
     reg_attr(defs, attr_payload("序列号", "生产序列中的顺序号(A2 排序结果)",
